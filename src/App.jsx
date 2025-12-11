@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Home from './pages/home';
 import About from './pages/About';
+import Hobbies from './pages/Hobbies';
 
 // Simple placeholder for pages we haven't built yet
 const Placeholder = ({ title }) => (
@@ -20,7 +21,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
-          <Route path="/hobbies" element={<Placeholder title="Hobbies" />} />
+          <Route path="/hobbies" element={<Hobbies />} />
           <Route path="/tutors" element={<Placeholder title="Tutors" />} />
         </Routes>
       </div>
