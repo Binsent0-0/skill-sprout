@@ -72,7 +72,7 @@ const Home = () => {
         </div>
 
         {/* The Scrolling Wrapper */}
-        <div className="flex animate-infinite-scroll pause-on-hover w-max">
+        <div className="flex animate-infinite-scroll hover:[animation-play-state:paused] w-max">
           {scrollingCategories.map((cat, index) => (
             <a 
               key={index}

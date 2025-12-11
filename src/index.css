@@ -17,3 +17,7 @@
   animation: scroll 40s linear infinite;
   width: max-content; /* Ensures the row doesn't wrap */
 }
+
+.animate-infinite-scroll:hover {
+  animation-play-state: paused;
+}
