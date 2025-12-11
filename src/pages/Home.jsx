@@ -1,18 +1,19 @@
 import React from 'react';
+import { FaGamepad, FaLaptopCode, FaMusic, FaUtensils, FaLanguage, FaPaintBrush, FaBriefcase, FaDumbbell, FaPencilAlt, FaCameraRetro, FaRocket } from 'react-icons/fa';
 
 const Home = () => {
-  // Updated Data: Removed Math/Science, Added Gaming
   const categories = [
-    { name: 'Gaming', icon: '🎮' }, // New Gaming Category
-    { name: 'Coding', icon: '💻' },
-    { name: 'Music', icon: '🎵' }, 
-    { name: 'Cooking', icon: '🍳' },
-    { name: 'Languages', icon: '🗣️' },
-    { name: 'Design', icon: '🎨' },
-    { name: 'Business', icon: '💼' },
-    { name: 'Fitness', icon: '💪' },
-    { name: 'Writing', icon: '✍️' },
-    { name: 'Photography', icon: '📸' },
+    // Replaced emoji strings with imported React Icon components
+    { name: 'Gaming', icon: FaGamepad },
+    { name: 'Coding', icon: FaLaptopCode },
+    { name: 'Music', icon: FaMusic }, 
+    { name: 'Cooking', icon: FaUtensils },
+    { name: 'Languages', icon: FaLanguage },
+    { name: 'Design', icon: FaPaintBrush },
+    { name: 'Business', icon: FaBriefcase },
+    { name: 'Fitness', icon: FaDumbbell },
+    { name: 'Writing', icon: FaPencilAlt },
+    { name: 'Photography', icon: FaCameraRetro },
   ];
 
   // Duplicate the array to create the seamless infinite scroll effect
@@ -52,7 +53,8 @@ const Home = () => {
             <div className="w-full h-[500px] bg-neutral-900 rounded-3xl shadow-2xl border border-gray-800 flex items-center justify-center overflow-hidden relative group">
               <div className="text-center">
                 <div className="w-20 h-20 bg-neutral-800 rounded-full mx-auto mb-4 flex items-center justify-center">
-                   <span className="text-4xl">🚀</span>
+                   {/* Using FaRocket icon component */}
+                   <FaRocket className="text-4xl text-white" /> 
                 </div>
                 <p className="text-gray-500 font-bold text-xl">Hero Image Area</p>
               </div>
@@ -78,7 +80,10 @@ const Home = () => {
               className="mx-4 group"
             >
               <div className="w-48 h-32 bg-neutral-900 border border-white/10 rounded-xl flex flex-col items-center justify-center gap-3 cursor-pointer transform transition-all duration-300 hover:scale-110 hover:border-orange-500/50 hover:bg-neutral-800 hover:shadow-xl hover:shadow-orange-900/20">
-                <span className="text-4xl group-hover:animate-bounce">{cat.icon}</span>
+                
+                {/* Rendering the React Icon component */}
+                <cat.icon className="text-4xl text-orange-400 group-hover:animate-bounce" /> 
+                
                 <span className="text-gray-300 font-bold group-hover:text-white transition-colors">
                   {cat.name}
                 </span>
