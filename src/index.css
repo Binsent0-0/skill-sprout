@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/* ... existing tailwind directives ... */
+
+@layer utilities {
+  .pause-on-hover:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-infinite-scroll {
+  animation: scroll 40s linear infinite;
+  width: max-content; /* Ensures the row doesn't wrap */
+}
