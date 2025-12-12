@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../supabaseClient'; // 1. Import Supabase to fetch role
+import { supabase } from '../supabaseClient'; 
 
 const Navbar = ({ session, onOpenModal, onLogout }) => {
   const [userRole, setUserRole] = useState(null); // 'student', 'tutor', or 'admin'
@@ -28,6 +28,13 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
   const getUserName = () => {
     if (!session || !session.user) return 'User';
     return session.user.user_metadata?.full_name || session.user.email.split('@')[0];
+  };
+
+  // Helper to determine where the user should go when clicking their name
+  const getDashboardPath = () => {
+    if (userRole === 'admin') return "/admin";
+    if (userRole === 'tutor') return "/tutor-dashboard";
+    return "/dashboard";
   };
 
   return (
@@ -66,8 +73,8 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
             ) : (
               /* --- LOGGED IN USER --- */
               <>
-
-                <Link to={userRole === 'tutor' ? "/tutor-dashboard" : "/dashboard"} 
+                {/* Dynamically route to Admin, Tutor, or Student dashboard */}
+                <Link to={getDashboardPath()} 
                   className="text-gray-300 hover:text-orange-500 font-medium transition duration-200 hidden lg:block"
                 >
                   Hello, <span className="text-white font-semibold">{getUserName()}!</span>
@@ -78,7 +85,14 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
                 </button>
 
                 {/* 3. DYNAMIC BUTTON BASED ON ROLE */}
-                {userRole === 'tutor' ? (
+                {userRole === 'admin' ? (
+                  // IF ADMIN: Show Admin Panel Button
+                  <Link to="/admin" 
+                    className="bg-purple-600 border border-purple-400 text-white px-6 py-2.5 rounded-full font-semibold hover:bg-purple-500 transition-all duration-200"
+                  >
+                    Admin Panel
+                  </Link>
+                ) : userRole === 'tutor' ? (
                   // IF TUTOR: Show "Create Listing"
                   <Link to="/create-listing" 
                     className="bg-neutral-800 border border-orange-500/50 text-orange-500 px-6 py-2.5 rounded-full font-semibold hover:bg-orange-500 hover:text-white transition-all duration-200"
@@ -86,7 +100,7 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
                     + Create Listing
                   </Link>
                 ) : (
-                  // IF STUDENT (or Admin/Loading): Show "Become a Tutor"
+                  // IF STUDENT: Show "Become a Tutor"
                   <Link to="/apply" 
                     className="bg-gradient-to-r from-orange-500 to-orange-700 text-white px-6 py-2.5 rounded-full font-semibold shadow-md shadow-orange-900/20 hover:shadow-orange-600/40 transform hover:-translate-y-0.5 transition-all duration-200"
                   >
