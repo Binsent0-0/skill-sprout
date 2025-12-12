@@ -9,3 +9,5 @@ npx tailwindcss init -p
 npm install lucide-react
 
 npm install -D @tailwindcss/postcss
+
+npm install @supabase/supabase-js
