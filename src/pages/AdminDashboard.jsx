@@ -62,15 +62,17 @@ const AdminDashboard = () => {
         setPosts(postData.filter(p => p.status !== 'pending'));
     }
 
-    // 3. Fetch Global Transactions with Profile Names
-    const { data: transData } = await supabase
+    // 3. Fetch Global Transactions
+    const { data: transData, error: transError } = await supabase
         .from('transactions')
-        .select(`
-            *,
-            profiles:profile_id (full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
-    setTransactions(transData || []);
+
+    if (transError) {
+        console.error("Error fetching transactions:", transError);
+    } else {
+        setTransactions(transData || []);
+    }
     
     setLoading(false);
   };
@@ -259,15 +261,15 @@ const AdminDashboard = () => {
                     <tr key={t.id} className="hover:bg-white/[0.02] transition-colors text-sm">
                       <td className="p-5">
                         <div className="flex items-center gap-2">
-                          {t.type === 'earning' ? <TrendingUp size={16} className="text-green-500" /> : <TrendingDown size={16} className="text-red-500" />}
-                          <span className={`text-white font-medium capitalize ${t.type === 'payment' ? 'text-red-400' : 'text-green-400'}`}>{t.type}</span>
+                          {t.type === 'payment' ? <TrendingUp size={16} className="text-green-500" /> : <TrendingDown size={16} className="text-red-500" />}
+                          <span className={`text-white font-medium capitalize ${t.type === 'payment' ? 'text-green-400' : 'text-red-400'}`}>{t.type}</span>
                         </div>
                       </td>
                       <td className="p-5 text-white font-medium">{t.profiles?.full_name || 'System'}</td>
                       <td className="p-5 text-gray-400">{t.plan_name}</td>
                       <td className="p-5 text-gray-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</td>
-                      <td className={`p-5 text-right font-black ${t.type === 'earning' ? 'text-green-500' : 'text-red-500'}`}>
-                        {t.type === 'earning' ? '+' : '-'} ₱{Number(t.amount).toLocaleString()}
+                      <td className={`p-5 text-right font-black ${t.type === 'payment' ? 'text-green-500' : 'text-red-500'}`}>
+                        {t.type === 'payment' ? '+' : '-'} ₱{Number(t.amount).toLocaleString()}
                       </td>
                     </tr>
                   ))}
