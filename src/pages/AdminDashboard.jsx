@@ -3,7 +3,8 @@ import { supabase } from '../supabaseClient';
 import { 
   Lock, Users, FileText, LogOut, 
   MoreVertical, Edit, Trash2, X, Save, AlertTriangle,
-  CheckCircle, XCircle, Star, Clock, Loader2, History, TrendingUp, TrendingDown
+  CheckCircle, XCircle, Star, Clock, Loader2, History, 
+  TrendingUp, TrendingDown, UserPlus, BookOpen
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -18,6 +19,7 @@ const AdminDashboard = () => {
   const [posts, setPosts] = useState([]); 
   const [pendingPosts, setPendingPosts] = useState([]); 
   const [transactions, setTransactions] = useState([]);
+  const [applications, setApplications] = useState([]); // New state for apps
   const [activeTab, setActiveTab] = useState('users'); 
   
   // Modal & Action States
@@ -51,48 +53,68 @@ const AdminDashboard = () => {
     const { data: userData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     setUsers(userData || []);
 
-    // 2. Fetch Hobbies (Posts) via RPC
-    const { data: postData, error: postError } = await supabase
-        .rpc('get_admin_hobbies', { pin_code: pin });
-
-    if (postError) {
-        console.error("Error fetching posts:", postError);
-    } else if (postData) {
+    // 2. Fetch Hobbies (Posts)
+    const { data: postData, error: postError } = await supabase.rpc('get_admin_hobbies', { pin_code: pin });
+    if (postError) console.error("Error fetching posts:", postError);
+    else if (postData) {
         setPendingPosts(postData.filter(p => p.status === 'pending'));
         setPosts(postData.filter(p => p.status !== 'pending'));
     }
 
-    // 3. Fetch Global Transactions
-    const { data: transData, error: transError } = await supabase
+    // 3. Fetch Global Transactions with Profiles
+    const { data: transData } = await supabase
         .from('transactions')
-        .select('*')
+        .select('*, profiles:profile_id(full_name)')
         .order('created_at', { ascending: false });
+    setTransactions(transData || []);
 
-    if (transError) {
-        console.error("Error fetching transactions:", transError);
-    } else {
-        setTransactions(transData || []);
-    }
+    // 4. Fetch Tutor Applications
+    const { data: appData } = await supabase
+        .from('tutor_applications')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+    setApplications(appData || []);
     
     setLoading(false);
   };
 
-  // --- HELPERS ---
-
-  const getTimeLeft = (expiryDate) => {
-    if (!expiryDate) return null;
-    const now = new Date();
-    const expiry = new Date(expiryDate);
-    const diff = expiry - now;
-    if (diff <= 0) return "Expired";
-    
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    return `${days}d ${hours}h`;
-  };
-
   // --- ACTIONS ---
 
+  const handleApplicationAction = async (appId, userId, newStatus) => {
+    setLoading(true);
+    try {
+      if (newStatus === 'approved') {
+        // CALL THE DATABASE FUNCTION (RPC)
+        const { error } = await supabase.rpc('approve_tutor_application', { 
+          app_id: appId, 
+          target_user_id: userId 
+        });
+
+        if (error) throw error;
+        alert("User promoted to Tutor and application cleared!");
+      } else {
+        // For Rejection: Just update the status so they can see it was declined
+        const { error: rejectError } = await supabase
+          .from('tutor_applications')
+          .update({ status: 'rejected' })
+          .eq('id', appId);
+        
+        if (rejectError) throw rejectError;
+        alert("Application declined.");
+      }
+
+      // Refresh the UI data
+      await fetchAllData();
+    } catch (err) {
+      console.error("Action error:", err);
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ... (Keep existing handleSaveEdit, handleDeleteUser, handlePostAction, handleFeatureToggle)
   const handleSaveEdit = async () => {
     if (!editingUser) return;
     const { error } = await supabase.from('profiles').update({ full_name: editName, role: editRole }).eq('id', editingUser.id);
@@ -117,35 +139,14 @@ const AdminDashboard = () => {
       new_status: newStatus,
       pin_code: pin 
     });
-
-    if (error) {
-      alert("Failed: " + error.message);
-    } else {
-        const targetPost = pendingPosts.find(p => p.id === postId);
-        if (targetPost) {
-          setPendingPosts(pendingPosts.filter(p => p.id !== postId));
-          setPosts([{ ...targetPost, status: newStatus }, ...posts]);
-        } else {
-          setPosts(posts.map(p => p.id === postId ? { ...p, status: newStatus } : p));
-        }
-    }
+    if (!error) fetchAllData();
   };
 
   const handleFeatureToggle = async (type, id) => {
     if (type === 'Post') {
-      const { error } = await supabase.rpc('admin_toggle_featured_post', { 
-        target_post_id: id, 
-        pin_code: pin 
-      });
-
-      if (error) {
-        alert("Feature error: " + error.message);
-      } else {
-        const update = (list) => list.map(p => p.id === id ? { ...p, featured: !p.featured } : p);
-        setPosts(update(posts));
-        setPendingPosts(update(pendingPosts));
-        setActiveDropdown(null);
-      }
+      const { error } = await supabase.rpc('admin_toggle_featured_post', { target_post_id: id, pin_code: pin });
+      if (!error) fetchAllData();
+      setActiveDropdown(null);
     }
   };
 
@@ -155,16 +156,25 @@ const AdminDashboard = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [activeDropdown]);
 
+  const getTimeLeft = (expiryDate) => {
+    if (!expiryDate) return null;
+    const diff = new Date(expiryDate) - new Date();
+    if (diff <= 0) return "Expired";
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    return `${days}d ${hours}h`;
+  };
+
   const renderContent = () => {
     if (activeTab === 'users') {
       return (
         <div className="bg-neutral-900 border border-white/5 rounded-2xl overflow-hidden shadow-xl">
           <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
             <h2 className="text-xl font-bold text-white">User Management</h2>
-            <button onClick={fetchAllData} className="px-4 py-2 bg-white/5 text-white rounded-lg text-sm hover:bg-white/10 transition">Refresh</button>
+            <button onClick={fetchAllData} className="px-4 py-2 bg-white/5 text-white rounded-lg text-sm">Refresh</button>
           </div>
           <div className="overflow-x-auto pb-20">
-            <table className="w-full text-left">
+            <table className="w-full text-left border-collapse">
               <thead className="bg-white/[0.02] text-neutral-400 text-xs uppercase tracking-wider">
                 <tr><th className="p-5">User</th><th className="p-5">Role</th><th className="p-5">Joined</th><th className="p-5 text-right">Action</th></tr>
               </thead>
@@ -173,13 +183,7 @@ const AdminDashboard = () => {
                   <tr key={user.id} className="hover:bg-white/[0.01]">
                     <td className="p-5 text-white font-medium">{user.full_name || user.email}</td>
                     <td className="p-5">
-                       <span className={`px-2 py-1 rounded text-xs border capitalize ${
-                         user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 
-                         user.role === 'tutor' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                         'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                       }`}>
-                         {user.role || 'student'}
-                       </span>
+                       <span className={`px-2 py-1 rounded text-xs border capitalize ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'}`}>{user.role || 'student'}</span>
                     </td>
                     <td className="p-5 text-neutral-500">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="p-5 text-right relative">
@@ -205,7 +209,7 @@ const AdminDashboard = () => {
             <div className="bg-neutral-900 border border-white/5 rounded-2xl overflow-hidden shadow-xl">
                 <div className="p-6 border-b border-white/5 bg-white/[0.02]"><h2 className="text-xl font-bold text-white">Platform Listings</h2></div>
                 <div className="overflow-x-auto pb-20">
-                    <table className="w-full text-left">
+                    <table className="w-full text-left border-collapse">
                     <thead className="bg-white/[0.02] text-neutral-400 text-xs uppercase tracking-wider">
                         <tr><th className="p-5">Listing</th><th className="p-5 text-center">Featured</th><th className="p-5">Time Left</th><th className="p-5">Tutor</th><th className="p-5">Status</th><th className="p-5 text-right">Action</th></tr>
                     </thead>
@@ -236,13 +240,62 @@ const AdminDashboard = () => {
         );
     }
 
+    if (activeTab === 'applications') {
+      return (
+        <div className="space-y-4 animate-in fade-in duration-500">
+          <h2 className="text-xl font-bold text-white mb-4">Tutor Applications ({applications.length})</h2>
+          {applications.length === 0 ? (
+            <div className="p-20 text-center text-gray-500 italic bg-neutral-900 rounded-2xl border border-white/5">No pending applications.</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {applications.map(app => (
+                <div key={app.id} className="bg-neutral-900 border border-white/10 p-6 rounded-2xl shadow-xl">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-white">{app.full_name}</h3>
+                      <p className="text-orange-500 text-sm font-bold uppercase tracking-widest">{app.category}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-500 font-mono uppercase">{new Date(app.created_at).toLocaleDateString()}</span>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold mb-1">Bio</p>
+                      <p className="text-gray-300 text-sm italic">"{app.bio}"</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase font-bold mb-1">Experience</p>
+                      <p className="text-gray-300 text-sm">{app.experience}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 border-t border-white/5 pt-6">
+                    <button 
+                      onClick={() => handleApplicationAction(app.id, app.user_id, 'approved')}
+                      className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
+                    >
+                      <CheckCircle size={18} /> Approve & Promote to Tutor
+                    </button>
+                    <button 
+                      onClick={() => handleApplicationAction(app.id, app.user_id, 'rejected')}
+                      className="px-6 py-3 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-500 border border-white/10 rounded-xl font-bold transition-all"
+                    >
+                      <XCircle size={18} /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (activeTab === 'transactions') {
-        // --- ADDED: Revenue Calculation ---
         const totalRevenue = transactions.reduce((acc, t) => t.type === 'payment' ? acc + parseFloat(t.amount) : acc, 0);
 
         return (
           <div className="animate-in fade-in duration-500 space-y-6">
-            {/* --- ADDED: Revenue Card --- */}
             <div className="bg-neutral-900 border border-orange-500/20 p-6 rounded-2xl flex items-center justify-between shadow-xl">
               <div>
                 <p className="text-gray-400 text-[10px] uppercase tracking-widest font-bold mb-1">Total Platform Revenue</p>
@@ -253,7 +306,7 @@ const AdminDashboard = () => {
 
             <div className="bg-neutral-900 border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-white/5 text-gray-500 text-[10px] uppercase tracking-widest">
+                <thead className="bg-white/5 text-gray-500 text-[10px] uppercase tracking-widest font-bold">
                   <tr><th className="p-5">Activity</th><th className="p-5">User</th><th className="p-5">Details</th><th className="p-5">Date</th><th className="p-5 text-right">Amount</th></tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -275,7 +328,6 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
-              {transactions.length === 0 && <div className="p-20 text-center text-gray-500 italic font-mono">No financial data available yet.</div>}
             </div>
           </div>
         );
@@ -314,7 +366,7 @@ const AdminDashboard = () => {
             <div className="relative mx-auto w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10 text-orange-500"><Lock size={24} /></div>
             <div className="text-center mb-8"><h2 className="text-xl font-bold text-white mb-2 tracking-wide">Admin Access</h2><p className="text-sm text-neutral-500">Enter PIN to manage listings</p></div>
             <form onSubmit={handleAdminLogin} className="space-y-4">
-                <input type="password" maxLength="4" className={`w-full bg-neutral-950 border ${error ? 'border-red-500 text-red-500' : 'border-neutral-800 text-white'} rounded-lg py-4 text-center text-2xl tracking-[1em] outline-none transition-all`} value={pin} onChange={(e) => setPin(e.target.value)} placeholder="••••" />
+                <input type="password" maxLength="4" className={`w-full bg-neutral-950 border ${error ? 'border-red-500 text-red-500 animate-shake' : 'border-neutral-800 text-white'} rounded-lg py-4 text-center text-2xl tracking-[1em] outline-none transition-all`} value={pin} onChange={(e) => setPin(e.target.value)} placeholder="••••" />
                 <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3.5 rounded-lg transition-all active:scale-[0.98]">Unlock Dashboard</button>
             </form>
         </div>
@@ -328,6 +380,12 @@ const AdminDashboard = () => {
         <div className="h-20 flex items-center px-8 border-b border-white/5"><h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-red-500">Admin Panel</h1></div>
         <nav className="flex-1 px-4 py-6 space-y-2">
           <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Users size={20} /> Users</button>
+          
+          {/* New Sidebar Tab */}
+          <button onClick={() => setActiveTab('applications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'applications' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}>
+            <UserPlus size={20} /> Applications {applications.length > 0 && <span className="ml-auto bg-white text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{applications.length}</span>}
+          </button>
+
           <button onClick={() => setActiveTab('posts')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'posts' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><FileText size={20} /> Listings</button>
           <button onClick={() => setActiveTab('pending')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'pending' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Clock size={20} /> Pending {pendingPosts.length > 0 && <span className="ml-auto bg-white text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pendingPosts.length}</span>}</button>
           <button onClick={() => setActiveTab('transactions')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><History size={20} /> Transactions</button>
@@ -345,7 +403,7 @@ const AdminDashboard = () => {
         </div>
       </main>
 
-      {/* EDIT MODAL */}
+      {/* Edit and Delete Modals remain same as before */}
       {editingUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
