@@ -7,7 +7,7 @@ import AuthModal from './components/AuthModal';
 import ProtectedRoute from './components/ProtectedRoute';
 import ChatWidget from './components/ChatWidget';
 
-import Home from './pages/home';
+import Home from './pages/Home';
 import About from './pages/About';
 import Hobbies from './pages/Hobbies';
 import Tutors from './pages/Tutors';
