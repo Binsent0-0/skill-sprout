@@ -27,8 +27,8 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
   }, [externalUser]);
 
   useEffect(() => {
-    if (isOpen && currentUserId) fetchContacts();
-  }, [isOpen, currentUserId]);
+    if (currentUserId) fetchContacts();
+  }, [currentUserId]);
 
   const fetchContacts = async () => {
     const { data } = await supabase
@@ -99,7 +99,7 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
   return (
     <div className="fixed bottom-6 right-6 z-[999] font-sans">
       {!isOpen && (
-        <button onClick={() => setIsOpen(true)} className={`w-16 h-16 bg-orange-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:bg-orange-500 transition-all hover:scale-110 border-4 border-black ${totalUnread > 0 ? 'bg-orange-500/20 border-orange-500 animate-pulse' : ''}`}>
+        <button onClick={() => { setIsOpen(true); setUnreadCounts({}); }} className={`w-16 h-16 bg-orange-600 rounded-full shadow-2xl flex items-center justify-center text-white hover:bg-orange-500 transition-all hover:scale-110 border-4 border-black ${totalUnread > 0 ? 'bg-orange-500/20 border-orange-500 animate-pulse' : ''}`}>
           <MessageSquare size={28} />
         </button>
       )}
