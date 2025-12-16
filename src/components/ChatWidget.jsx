@@ -11,7 +11,10 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [newMessageIds, setNewMessageIds] = useState(new Set());
   const scrollRef = useRef(null);
+
+  const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
 
   // WATCHER: Opens the chat window when a profile clicks "Send Message"
   useEffect(() => {
@@ -37,6 +40,18 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
       const contactIds = [...new Set(data.map(m => m.sender_id === currentUserId ? m.receiver_id : m.sender_id))];
       const { data: profileData } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', contactIds);
       setContacts(profileData || []);
+
+      // Calculate unread counts
+      const counts = {};
+      for (const contactId of contactIds) {
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('sender_id', contactId)
+          .eq('receiver_id', currentUserId);
+        counts[contactId] = count || 0;
+      }
+      setUnreadCounts(counts);
     }
   };
 
@@ -50,6 +65,10 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
           if ((msg.sender_id === selectedContact.id && msg.receiver_id === currentUserId) ||
               (msg.sender_id === currentUserId && msg.receiver_id === selectedContact.id)) {
             setMessages((prev) => [...prev, msg]);
+            if (msg.sender_id === selectedContact.id) {
+              setUnreadCounts(prev => ({ ...prev, [selectedContact.id]: (prev[selectedContact.id] || 0) + 1 }));
+              setNewMessageIds(prev => new Set([...prev, msg.id]));
+            }
           }
         })
         .subscribe();
@@ -99,18 +118,21 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
             {view === 'list' ? (
               contacts.length === 0 ? <p className="text-center text-gray-500 text-xs mt-20 italic">No messages yet.</p> :
               contacts.map(c => (
-                <div key={c.id} onClick={() => { setSelectedContact(c); setView('chat'); }} className="flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition-all">
+                <div key={c.id} onClick={() => { setSelectedContact(c); setView('chat'); setUnreadCounts(prev => ({ ...prev, [c.id]: 0 })); setNewMessageIds(prev => { const newSet = new Set(prev); [...prev].filter(id => !messages.some(msg => msg.id === id && msg.sender_id === c.id)).forEach(id => newSet.delete(id)); return newSet; }); }} className={`flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition-all ${unreadCounts[c.id] > 0 ? 'bg-orange-500/10 border-l-4 border-orange-500' : ''}`}>
                   <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
                     {c.avatar_url ? <img src={c.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="text-orange-500" />}
                   </div>
-                  <p className="text-white text-sm font-medium">{c.full_name}</p>
+                  <p className="text-white text-sm font-medium flex-1">{c.full_name}</p>
+                  {unreadCounts[c.id] > 0 && (
+                    <span className="bg-orange-500 text-white text-xs rounded-full px-2 py-1 font-bold">{unreadCounts[c.id]}</span>
+                  )}
                 </div>
               ))
             ) : (
               <>
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.sender_id === currentUserId ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${msg.sender_id === currentUserId ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-neutral-800 text-gray-200 rounded-tl-none'}`}>
+                    <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm ${msg.sender_id === currentUserId ? 'bg-orange-600 text-white rounded-tr-none' : 'bg-neutral-800 text-gray-200 rounded-tl-none'} ${msg.sender_id !== currentUserId && newMessageIds.has(msg.id) ? 'bg-orange-500/20 border border-orange-500 animate-pulse' : ''}`}>
                       {msg.content}
                     </div>
                   </div>
