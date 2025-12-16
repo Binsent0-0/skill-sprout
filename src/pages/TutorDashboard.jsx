@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { 
   User, List, FileText, Camera, Save, Loader2, Plus, 
   BookOpen, CheckCircle, MessageCircle, Star, MoreVertical, Trash2, X, Clock, 
-  TrendingUp, TrendingDown, History
+  TrendingUp, TrendingDown, History, GraduationCap, Users
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -14,16 +14,13 @@ const TutorDashboard = () => {
 
   // --- DATA STATES ---
   const [profile, setProfile] = useState({ full_name: '', bio: '', avatar_url: '' });
-  const [enrollments, setEnrollments] = useState([]); 
-  const [writtenReviews, setWrittenReviews] = useState([]); 
+  const [enrollments, setEnrollments] = useState([]); // Classes I am learning
+  const [myStudents, setMyStudents] = useState([]); // Students learning FROM me
   const [approvedListings, setApprovedListings] = useState([]); 
-  const [pendingListings, setPendingListings] = useState([]); 
   const [receivedReviews, setReceivedReviews] = useState([]); 
   const [transactions, setTransactions] = useState([]); 
 
   // --- UI STATES ---
-  const [saving, setSaving] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const fileInputRef = useRef(null);
@@ -46,31 +43,62 @@ const TutorDashboard = () => {
     if (currentSession) {
       const userId = currentSession.user.id;
 
+      // 1. Profile
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', userId).single();
       setProfile(profileData || {});
 
+      // 2. My Learning (Classes I am enrolled in)
       const { data: enrollmentData } = await supabase.from('enrollments').select('*, hobbies(*)').eq('user_id', userId);
       setEnrollments(enrollmentData || []);
 
-      const { data: myWrittenReviews } = await supabase.from('reviews').select('*, hobbies(title)').eq('user_id', userId);
-      setWrittenReviews(myWrittenReviews || []);
+      // --- 3. My Students (UPDATED: SAFE TWO-STEP FETCH) ---
+      // Step A: Get the IDs of hobbies YOU created first
+      const { data: myHobbies } = await supabase
+        .from('hobbies')
+        .select('id')
+        .eq('created_by', userId);
 
+      const myHobbyIds = myHobbies?.map(h => h.id) || [];
+
+      // Step B: If you have hobbies, fetch students enrolled ONLY in those hobbies
+      if (myHobbyIds.length > 0) {
+        const { data: studentData, error } = await supabase
+          .from('enrollments')
+          .select(`
+            id,
+            created_at,
+            status,
+            hobbies (id, title, created_by),
+            profiles:user_id (full_name, avatar_url, email)
+          `)
+          .in('hobby_id', myHobbyIds) // Filter: Must be in MY hobbies list
+          .neq('status', 'graduated'); // Don't show graduated students
+
+        if (error) {
+            console.error("Error fetching students:", error);
+        } else {
+            setMyStudents(studentData || []);
+        }
+      } else {
+        // You haven't created any hobbies, so you have no students
+        setMyStudents([]);
+      }
+      // ----------------------------------------------------
+
+      // 4. Listings
       const { data: hobbies } = await supabase.from('hobbies').select('*').eq('created_by', userId);
       if (hobbies) {
         setApprovedListings(hobbies.filter(h => h.status === 'approved'));
-        setPendingListings(hobbies.filter(h => h.status !== 'approved'));
       }
 
+      // 5. Reviews
+      // Note: We keep !inner here if it works for reviews, otherwise apply similar logic if this fails too.
       const { data: reviewsOnMe } = await supabase.from('reviews').select('*, hobbies!inner(title, created_by)').eq('hobbies.created_by', userId);
       setReceivedReviews(reviewsOnMe || []);
 
-      const { data: transData, error: transError } = await supabase.from('transactions').select('*').eq('profile_id', userId).order('created_at', { ascending: false });
-      if (transError) {
-        console.error('Error fetching transactions:', transError);
-      } else {
-        console.log('Fetched transactions for userId:', userId, transData);
-        setTransactions(transData || []);
-      }
+      // 6. Transactions
+      const { data: transData } = await supabase.from('transactions').select('*').eq('profile_id', userId).order('created_at', { ascending: false });
+      setTransactions(transData || []);
     }
     setLoading(false);
   };
@@ -84,24 +112,23 @@ const TutorDashboard = () => {
     return `${days}d ${hours}h left`;
   };
 
+  // --- ACTIONS ---
   const handleFakePayment = async (plan) => {
     setProcessingPayment(true);
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + plan.days);
 
     try {
-      // 1. Insert Transaction RECORD (Including Price and Type)
       const { error: transError } = await supabase.from('transactions').insert([{
         profile_id: session.user.id,
         hobby_id: showFeatureModal.id,
-        amount: plan.price, // This adds the price to your transaction record
+        amount: plan.price,
         plan_name: plan.name,
-        type: 'payment' // Minus money
+        type: 'payment'
       }]);
 
       if (transError) throw transError;
 
-      // 2. Update the Listing to be Featured
       const { error: hobbyError } = await supabase.from('hobbies').update({ 
         featured: true, 
         featured_until: expiryDate.toISOString() 
@@ -120,6 +147,26 @@ const TutorDashboard = () => {
     }
   };
 
+  const handleGraduateStudent = async (enrollmentId, studentName) => {
+    if (!window.confirm(`Are you sure you want to graduate ${studentName}?`)) return;
+
+    try {
+      // Updates the status in your 'enrollments' table
+      const { error } = await supabase
+        .from('enrollments')
+        .update({ status: 'graduated' }) 
+        .eq('id', enrollmentId);
+
+      if (error) throw error;
+      
+      alert(`${studentName} has been graduated!`);
+      getInitialData(); 
+    } catch (error) {
+      alert("Error graduating student: " + error.message);
+    }
+  };
+
+  // --- RENDERERS ---
   const renderContent = () => {
     switch (activeTab) {
       case 'profile':
@@ -158,6 +205,80 @@ const TutorDashboard = () => {
                 <button className="text-sm bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg transition-colors">Enter Classroom</button>
               </div>
             ))}
+          </div>
+        );
+
+      // --- TAB: Enrolled Students (Connected to your Screenshot) ---
+      case 'enrolled_students':
+        return (
+          <div className="animate-in fade-in">
+              <h2 className="text-2xl font-bold text-white mb-6">Enrolled Students</h2>
+              <div className="bg-neutral-900 border border-white/5 rounded-2xl overflow-visible shadow-2xl">
+               <table className="w-full text-left border-collapse">
+                 <thead className="bg-white/5 text-gray-500 text-[10px] uppercase tracking-widest">
+                   <tr>
+                     <th className="p-4 rounded-tl-2xl">Student Name</th>
+                     <th className="p-4">Enrolled Lesson</th>
+                     <th className="p-4">Date Enrolled</th>
+                     <th className="p-4 text-right rounded-tr-2xl">Actions</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-white/5">
+                   {myStudents.map((item) => (
+                     <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
+                       <td className="p-4">
+                         <div className="flex items-center gap-3">
+                            {item.profiles?.avatar_url ? (
+                              <img src={item.profiles.avatar_url} className="w-8 h-8 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-xs font-bold">{item.profiles?.full_name?.charAt(0) || 'S'}</div>
+                            )}
+                            <span className="text-white font-bold text-sm">{item.profiles?.full_name || 'Anonymous Student'}</span>
+                         </div>
+                       </td>
+                       <td className="p-4 text-gray-400 text-sm font-medium">
+                         {item.hobbies?.title}
+                       </td>
+                       <td className="p-4 text-gray-500 text-xs">
+                         {new Date(item.created_at).toLocaleDateString()}
+                       </td>
+                       <td className="p-4 text-right relative">
+                         <div className="relative inline-block text-left group/menu">
+                           <button className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/10">
+                             <MoreVertical size={16} />
+                           </button>
+                           {/* Dropdown Menu */}
+                           <div className="absolute right-0 top-full mt-1 w-48 bg-neutral-800 border border-white/10 rounded-xl shadow-xl z-50 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all transform origin-top-right scale-95 group-hover/menu:scale-100">
+                              <div className="p-1">
+                                <button 
+                                  onClick={() => handleGraduateStudent(item.id, item.profiles?.full_name)}
+                                  className="w-full text-left px-3 py-2 text-xs font-bold text-green-400 hover:bg-green-500/10 rounded-lg flex items-center gap-2"
+                                >
+                                  <GraduationCap size={14} /> Graduate Student
+                                </button>
+                                <button className="w-full text-left px-3 py-2 text-xs font-bold text-white hover:bg-white/5 rounded-lg flex items-center gap-2">
+                                  <MessageCircle size={14} /> Message
+                                </button>
+                                <div className="h-px bg-white/10 my-1"></div>
+                                <button className="w-full text-left px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-2">
+                                  <Trash2 size={14} /> Remove
+                                </button>
+                              </div>
+                           </div>
+                         </div>
+                       </td>
+                     </tr>
+                   ))}
+                   {myStudents.length === 0 && (
+                     <tr>
+                       <td colSpan="4" className="p-10 text-center text-gray-500 italic">
+                         No students have enrolled in your classes yet.
+                       </td>
+                     </tr>
+                   )}
+                 </tbody>
+               </table>
+              </div>
           </div>
         );
 
@@ -276,6 +397,9 @@ const TutorDashboard = () => {
           <div>
             <h3 className="px-4 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-2">Teaching View</h3>
             <div className="space-y-1">
+              {/* --- ENROLLED STUDENTS BUTTON --- */}
+              <button onClick={() => setActiveTab('enrolled_students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'enrolled_students' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Users size={18}/> Enrolled Students</button>
+              
               <button onClick={() => setActiveTab('listings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'listings' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><List size={18}/> My Listings</button>
               <button onClick={() => setActiveTab('reviews_received')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'reviews_received' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><MessageCircle size={18}/> My Reviews</button>
               <button onClick={() => setActiveTab('transactions')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><History size={18}/> Transactions</button>
