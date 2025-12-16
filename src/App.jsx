@@ -30,10 +30,13 @@ function App() {
 
   return (
     <div className="min-h-screen bg-black">
-      <Navbar 
-        session={session} 
+      <Navbar
+        session={session}
         onOpenModal={() => setIsModalOpen(true)}
-        onLogout={() => supabase.auth.signOut()}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          setSession(null);
+        }}
       />
       
       <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />

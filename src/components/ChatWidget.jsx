@@ -12,6 +12,7 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
   const [newMessage, setNewMessage] = useState('');
   const [unreadCounts, setUnreadCounts] = useState({});
   const [newMessageIds, setNewMessageIds] = useState(new Set());
+  const [hasBeenOpened, setHasBeenOpened] = useState(false);
   const scrollRef = useRef(null);
 
   const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
@@ -30,6 +31,14 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
     if (currentUserId) fetchContacts();
   }, [currentUserId]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setUnreadCounts({});
+      setNewMessageIds(new Set());
+      setHasBeenOpened(true);
+    }
+  }, [isOpen]);
+
   const fetchContacts = async () => {
     const { data } = await supabase
       .from('messages')
@@ -41,22 +50,24 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
       const { data: profileData } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', contactIds);
       setContacts(profileData || []);
 
-      // Calculate unread counts
-      const counts = {};
-      for (const contactId of contactIds) {
-        const { count } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('sender_id', contactId)
-          .eq('receiver_id', currentUserId);
-        counts[contactId] = count || 0;
+      // Calculate unread counts only if chat is not open and has not been opened before
+      if (!isOpen && !hasBeenOpened) {
+        const counts = {};
+        for (const contactId of contactIds) {
+          const { count } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('sender_id', contactId)
+            .eq('receiver_id', currentUserId);
+          counts[contactId] = count || 0;
+        }
+        setUnreadCounts(counts);
       }
-      setUnreadCounts(counts);
     }
   };
 
   useEffect(() => {
-    if (view === 'chat' && selectedContact) {
+    if (view === 'chat' && selectedContact && isOpen) {
       fetchMessages();
       const subscription = supabase
         .channel(`chat-${selectedContact.id}`)
@@ -74,7 +85,7 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
         .subscribe();
       return () => { supabase.removeChannel(subscription); };
     }
-  }, [view, selectedContact]);
+  }, [view, selectedContact, isOpen]);
 
   const fetchMessages = async () => {
     const { data } = await supabase
