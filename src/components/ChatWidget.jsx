@@ -10,6 +10,7 @@ const ChatWidget = ({ currentUserId, externalUser, onChatStarted }) => {
   const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [unreadCounts, setUnreadCounts] = useState({});
   const scrollRef = useRef(null);
 
   // WATCHER: Opens the chat window when a profile clicks "Send Message"
