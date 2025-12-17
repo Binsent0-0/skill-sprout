@@ -63,10 +63,33 @@ const AuthModal = ({ isOpen, onClose }) => {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+
+        // Prefer the returned user from signIn, fallback to getUser()
+        let user = data?.user ?? null;
+        if (!user) {
+          const userRes = await supabase.auth.getUser();
+          user = userRes?.data?.user ?? null;
+        }
+
+        // After successful login, close modal then redirect based on role
         handleClose();
-        navigate('/');
+
+        try {
+          if (user) {
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+            if (profile?.role === 'admin') {
+              navigate('/admin');
+            } else {
+              navigate('/');
+            }
+          } else {
+            navigate('/');
+          }
+        } catch (err) {
+          navigate('/');
+        }
       } else {
         const { error } = await supabase.auth.signUp({
           email,

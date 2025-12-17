@@ -1,9 +1,13 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn, FaHeart } from 'react-icons/fa';
 
 const Footer = () => {
+  const location = useLocation();
   const currentYear = new Date().getFullYear();
+
+  // Hide footer on admin panel routes
+  if (location.pathname.startsWith('/admin')) return null;
 
   return (
     <footer className="bg-black border-t border-white/10 pt-8 pb-4">

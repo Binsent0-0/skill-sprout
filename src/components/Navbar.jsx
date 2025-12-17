@@ -28,6 +28,9 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
     fetchUserProfile();
   }, [session]);
 
+  // If the logged-in user is an admin, hide the navbar entirely
+  if (userRole === 'admin') return null;
+
   const getDisplayName = () => {
     if (dbName) return dbName; 
     if (!session || !session.user) return 'User';

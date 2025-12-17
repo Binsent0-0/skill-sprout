@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { 
   Lock, Users, FileText, LogOut, 
-  MoreVertical, Edit, Trash2, X, Save, AlertTriangle,
-  CheckCircle, XCircle, Star, Clock, Loader2, History, 
-  TrendingUp, TrendingDown, UserPlus, BookOpen
+  MoreVertical, Edit, Trash2, CheckCircle, XCircle, 
+  Star, Clock, Loader2, History, TrendingUp, TrendingDown, 
+  UserPlus, AlertTriangle 
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -19,19 +20,28 @@ const AdminDashboard = () => {
   const [posts, setPosts] = useState([]); 
   const [pendingPosts, setPendingPosts] = useState([]); 
   const [transactions, setTransactions] = useState([]);
-  const [applications, setApplications] = useState([]); // New state for apps
+  const [applications, setApplications] = useState([]); 
   const [activeTab, setActiveTab] = useState('users'); 
   
   // Modal & Action States
   const [activeDropdown, setActiveDropdown] = useState(null); 
   const [editingUser, setEditingUser] = useState(null); 
   const [deletingUser, setDeletingUser] = useState(null); 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
   // Edit Form State
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('student');
 
-  // --- LOGIC ---
+  const navigate = useNavigate();
+
+  // Disable page/body scrolling while admin panel is active
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // We lock the body scroll because the dashboard handles its own scrolling
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = 'auto'; };
+  }, [isAuthenticated]);
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
@@ -55,13 +65,12 @@ const AdminDashboard = () => {
 
     // 2. Fetch Hobbies (Posts)
     const { data: postData, error: postError } = await supabase.rpc('get_admin_hobbies', { pin_code: pin });
-    if (postError) console.error("Error fetching posts:", postError);
-    else if (postData) {
+    if (postData) {
         setPendingPosts(postData.filter(p => p.status === 'pending'));
         setPosts(postData.filter(p => p.status !== 'pending'));
     }
 
-    // 3. Fetch Global Transactions with Profiles
+    // 3. Fetch Global Transactions
     const { data: transData } = await supabase
         .from('transactions')
         .select('*, profiles:profile_id(full_name)')
@@ -80,41 +89,27 @@ const AdminDashboard = () => {
   };
 
   // --- ACTIONS ---
-
   const handleApplicationAction = async (appId, userId, newStatus) => {
     setLoading(true);
     try {
       if (newStatus === 'approved') {
-        // CALL THE DATABASE FUNCTION (RPC)
         const { error } = await supabase.rpc('approve_tutor_application', { 
           app_id: appId, 
           target_user_id: userId 
         });
-
         if (error) throw error;
-        alert("User promoted to Tutor and application cleared!");
       } else {
-        // For Rejection: Just update the status so they can see it was declined
-        const { error: rejectError } = await supabase
-          .from('tutor_applications')
-          .update({ status: 'rejected' })
-          .eq('id', appId);
-        
-        if (rejectError) throw rejectError;
-        alert("Application declined.");
+        const { error } = await supabase.from('tutor_applications').update({ status: 'rejected' }).eq('id', appId);
+        if (error) throw error;
       }
-
-      // Refresh the UI data
       await fetchAllData();
     } catch (err) {
-      console.error("Action error:", err);
       alert("Error: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // ... (Keep existing handleSaveEdit, handleDeleteUser, handlePostAction, handleFeatureToggle)
   const handleSaveEdit = async () => {
     if (!editingUser) return;
     const { error } = await supabase.from('profiles').update({ full_name: editName, role: editRole }).eq('id', editingUser.id);
@@ -134,11 +129,7 @@ const AdminDashboard = () => {
   };
 
   const handlePostAction = async (postId, newStatus) => {
-    const { error } = await supabase.rpc('admin_update_post_status', { 
-      target_post_id: postId, 
-      new_status: newStatus,
-      pin_code: pin 
-    });
+    const { error } = await supabase.rpc('admin_update_post_status', { target_post_id: postId, new_status: newStatus, pin_code: pin });
     if (!error) fetchAllData();
   };
 
@@ -165,6 +156,7 @@ const AdminDashboard = () => {
     return `${days}d ${hours}h`;
   };
 
+  // --- RENDER CONTENT ---
   const renderContent = () => {
     if (activeTab === 'users') {
       return (
@@ -257,31 +249,13 @@ const AdminDashboard = () => {
                     </div>
                     <span className="text-[10px] text-gray-500 font-mono uppercase">{new Date(app.created_at).toLocaleDateString()}</span>
                   </div>
-                  
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold mb-1">Bio</p>
-                      <p className="text-gray-300 text-sm italic">"{app.bio}"</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase font-bold mb-1">Experience</p>
-                      <p className="text-gray-300 text-sm">{app.experience}</p>
-                    </div>
+                    <div><p className="text-xs text-gray-500 uppercase font-bold mb-1">Bio</p><p className="text-gray-300 text-sm italic">"{app.bio}"</p></div>
+                    <div><p className="text-xs text-gray-500 uppercase font-bold mb-1">Experience</p><p className="text-gray-300 text-sm">{app.experience}</p></div>
                   </div>
-
                   <div className="flex gap-3 border-t border-white/5 pt-6">
-                    <button 
-                      onClick={() => handleApplicationAction(app.id, app.user_id, 'approved')}
-                      className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all"
-                    >
-                      <CheckCircle size={18} /> Approve & Promote to Tutor
-                    </button>
-                    <button 
-                      onClick={() => handleApplicationAction(app.id, app.user_id, 'rejected')}
-                      className="px-6 py-3 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-500 border border-white/10 rounded-xl font-bold transition-all"
-                    >
-                      <XCircle size={18} /> Reject
-                    </button>
+                    <button onClick={() => handleApplicationAction(app.id, app.user_id, 'approved')} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"><CheckCircle size={18} /> Approve</button>
+                    <button onClick={() => handleApplicationAction(app.id, app.user_id, 'rejected')} className="px-6 py-3 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-500 border border-white/10 rounded-xl font-bold"><XCircle size={18} /> Reject</button>
                   </div>
                 </div>
               ))}
@@ -293,17 +267,12 @@ const AdminDashboard = () => {
 
     if (activeTab === 'transactions') {
         const totalRevenue = transactions.reduce((acc, t) => t.type === 'payment' ? acc + parseFloat(t.amount) : acc, 0);
-
         return (
           <div className="animate-in fade-in duration-500 space-y-6">
             <div className="bg-neutral-900 border border-orange-500/20 p-6 rounded-2xl flex items-center justify-between shadow-xl">
-              <div>
-                <p className="text-gray-400 text-[10px] uppercase tracking-widest font-bold mb-1">Total Platform Revenue</p>
-                <h3 className="text-4xl font-black text-white">₱{totalRevenue.toLocaleString()}</h3>
-              </div>
+              <div><p className="text-gray-400 text-[10px] uppercase tracking-widest font-bold mb-1">Total Platform Revenue</p><h3 className="text-4xl font-black text-white">₱{totalRevenue.toLocaleString()}</h3></div>
               <div className="p-4 bg-orange-500/10 rounded-2xl text-orange-500"><TrendingUp size={32} /></div>
             </div>
-
             <div className="bg-neutral-900 border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-white/5 text-gray-500 text-[10px] uppercase tracking-widest font-bold">
@@ -312,18 +281,11 @@ const AdminDashboard = () => {
                 <tbody className="divide-y divide-white/5">
                   {transactions.map(t => (
                     <tr key={t.id} className="hover:bg-white/[0.02] transition-colors text-sm">
-                      <td className="p-5">
-                        <div className="flex items-center gap-2">
-                          {t.type === 'payment' ? <TrendingUp size={16} className="text-green-500" /> : <TrendingDown size={16} className="text-red-500" />}
-                          <span className={`text-white font-medium capitalize ${t.type === 'payment' ? 'text-green-400' : 'text-red-400'}`}>{t.type}</span>
-                        </div>
-                      </td>
+                      <td className="p-5"><div className="flex items-center gap-2">{t.type === 'payment' ? <TrendingUp size={16} className="text-green-500" /> : <TrendingDown size={16} className="text-red-500" />}<span className={`text-white font-medium capitalize ${t.type === 'payment' ? 'text-green-400' : 'text-red-400'}`}>{t.type}</span></div></td>
                       <td className="p-5 text-white font-medium">{t.profiles?.full_name || 'System'}</td>
                       <td className="p-5 text-gray-400">{t.plan_name}</td>
                       <td className="p-5 text-gray-500 text-xs">{new Date(t.created_at).toLocaleDateString()}</td>
-                      <td className={`p-5 text-right font-black ${t.type === 'payment' ? 'text-green-500' : 'text-red-500'}`}>
-                        {t.type === 'payment' ? '+' : '-'} ₱{Number(t.amount).toLocaleString()}
-                      </td>
+                      <td className={`p-5 text-right font-black ${t.type === 'payment' ? 'text-green-500' : 'text-red-500'}`}>{t.type === 'payment' ? '+' : '-'} ₱{Number(t.amount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -360,7 +322,7 @@ const AdminDashboard = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-sm bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-orange-600/10 blur-[50px] pointer-events-none" />
             <div className="relative mx-auto w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/10 text-orange-500"><Lock size={24} /></div>
@@ -374,27 +336,44 @@ const AdminDashboard = () => {
     );
   }
 
+  // --- MAIN LAYOUT ---
   return (
-    <div className="flex h-screen bg-black overflow-hidden font-sans">
-      <aside className="w-64 border-r border-white/10 flex flex-col z-20 h-full bg-black">
-        <div className="h-20 flex items-center px-8 border-b border-white/5"><h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-red-500">Admin Panel</h1></div>
-        <nav className="flex-1 px-4 py-6 space-y-2">
+    // FIX 1: 'fixed inset-0 z-50' forces this to cover the whole screen,
+    // ignoring the parent's padding or navbar offset.
+    <div className="fixed inset-0 z-50 flex bg-black font-sans">
+      
+      {/* Sidebar */}
+      <aside className="w-64 border-r border-white/10 flex flex-col h-full bg-black shrink-0">
+        <div className="h-20 flex items-center px-8 border-b border-white/5 shrink-0">
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-red-500">Admin Panel</h1>
+        </div>
+        
+        {/* FIX 2: overflow-y-auto ensures that if this list is long, IT scrolls,
+            while the logout button stays fixed at the bottom. */}
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
           <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Users size={20} /> Users</button>
-          
-          {/* New Sidebar Tab */}
           <button onClick={() => setActiveTab('applications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'applications' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}>
             <UserPlus size={20} /> Applications {applications.length > 0 && <span className="ml-auto bg-white text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{applications.length}</span>}
           </button>
-
           <button onClick={() => setActiveTab('posts')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'posts' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><FileText size={20} /> Listings</button>
           <button onClick={() => setActiveTab('pending')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'pending' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Clock size={20} /> Pending {pendingPosts.length > 0 && <span className="ml-auto bg-white text-orange-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pendingPosts.length}</span>}</button>
           <button onClick={() => setActiveTab('transactions')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><History size={20} /> Transactions</button>
         </nav>
-        <div className="p-4 border-t border-white/5"><button onClick={() => setIsAuthenticated(false)} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-bold"><LogOut size={20} /> Logout</button></div>
+        
+        {/* Logout Button (Sticky Bottom) */}
+        <div className="p-4 border-t border-white/5 shrink-0 bg-black">
+          <button
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-bold"
+          >
+            <LogOut size={20} /> Logout
+          </button>
+        </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-black p-8 lg:p-12">
-        <div className="max-w-7xl mx-auto">
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto bg-black p-8 lg:p-12 relative">
+        <div className="max-w-7xl mx-auto pb-20">
           <div className="mb-8 flex justify-between items-end">
             <div><h1 className="text-3xl font-bold text-white capitalize">{activeTab} Overview</h1><p className="text-gray-400 text-sm">Real-time platform metrics</p></div>
             {loading && <Loader2 className="animate-spin text-orange-500 mb-2" />}
@@ -403,7 +382,7 @@ const AdminDashboard = () => {
         </div>
       </main>
 
-      {/* Edit and Delete Modals remain same as before */}
+      {/* Modals (Edit, Delete, Logout) */}
       {editingUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
@@ -424,6 +403,32 @@ const AdminDashboard = () => {
             <h2 className="text-xl font-bold text-white mb-2">Delete User?</h2>
             <p className="text-gray-400 text-sm mb-6">This action cannot be undone. All data will be removed.</p>
             <div className="flex gap-3"><button onClick={() => setDeletingUser(null)} className="flex-1 py-3 border border-white/10 text-white rounded-lg">Cancel</button><button onClick={handleDeleteUser} className="flex-1 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700">Delete Forever</button></div>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-4 text-orange-500"><LogOut size={20} /></div>
+            <h2 className="text-xl font-bold text-white mb-2">Confirm Logout</h2>
+            <p className="text-gray-400 text-sm mb-6">Are you sure you want to sign out of the admin panel?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 border border-white/10 text-white rounded-lg">Cancel</button>
+              <button
+                onClick={async () => {
+                  try { await supabase.auth.signOut(); } catch (err) { console.error('Sign out error:', err); }
+                  setShowLogoutConfirm(false);
+                  setIsAuthenticated(false);
+                  // Ensure we unlock the body scroll before leaving
+                  document.body.style.overflow = 'auto';
+                  navigate('/');
+                }}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       )}
