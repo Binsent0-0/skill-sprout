@@ -71,7 +71,10 @@ const AuthModal = ({ isOpen, onClose }) => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { 
+            data: { full_name: fullName },
+            emailRedirectTo: window.location.origin // Good practice to add here too
+          },
         });
         if (error) throw error;
         
@@ -88,23 +91,44 @@ const AuthModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // --- UPDATED RESEND FUNCTION ---
   const handleResendEmail = async () => {
-    if (resendTimer > 0) return;
+    if (resendTimer > 0 || loading) return;
     
     setLoading(true);
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email,
-    });
-    
-    if (error) {
-      setMessage({ type: 'error', text: error.message });
-    } else {
+    setMessage({ type: '', text: '' });
+
+    try {
+      console.log("Attempting resend for:", email);
+      
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          // This ensures the link in the email points back to your app correctly
+          emailRedirectTo: window.location.origin 
+        }
+      });
+      
+      if (error) throw error;
+
       setMessage({ type: 'success', text: 'Verification email resent!' });
       setResendTimer(60);
+      
+    } catch (error) {
+      console.error("Resend error:", error);
+      // Supabase 429 = Too Many Requests
+      if (error.status === 429) {
+        setMessage({ type: 'error', text: 'Too many attempts. Please wait 60 seconds.' });
+        setResendTimer(60); 
+      } else {
+        setMessage({ type: 'error', text: error.message });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+  // ------------------------------
 
   if (!isOpen) return null;
 

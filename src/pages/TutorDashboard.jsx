@@ -6,6 +6,8 @@ import {
   TrendingUp, TrendingDown, History, GraduationCap, Users
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import GraduateModal from '../components/GraduateModal';
+import GraduateSuccessModal from '../components/GraduateSuccessModal';
 
 const TutorDashboard = () => {
   const [session, setSession] = useState(null);
@@ -16,6 +18,7 @@ const TutorDashboard = () => {
   const [profile, setProfile] = useState({ full_name: '', bio: '', avatar_url: '' });
   const [enrollments, setEnrollments] = useState([]); // Classes I am learning
   const [myStudents, setMyStudents] = useState([]); // Students learning FROM me
+  const [studentFetchError, setStudentFetchError] = useState(null);
   const [approvedListings, setApprovedListings] = useState([]); 
   const [receivedReviews, setReceivedReviews] = useState([]); 
   const [transactions, setTransactions] = useState([]); 
@@ -23,6 +26,11 @@ const TutorDashboard = () => {
   // --- UI STATES ---
   const [showFeatureModal, setShowFeatureModal] = useState(null);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [showGradModal, setShowGradModal] = useState(false);
+  const [gradTarget, setGradTarget] = useState({ enrollmentId: null, studentName: '' });
+  const [gradProcessing, setGradProcessing] = useState(false);
+  const [showGradSuccessModal, setShowGradSuccessModal] = useState(false);
+  const [gradSuccessName, setGradSuccessName] = useState('');
   const fileInputRef = useRef(null);
 
   const plans = [
@@ -51,8 +59,8 @@ const TutorDashboard = () => {
       const { data: enrollmentData } = await supabase.from('enrollments').select('*, hobbies(*)').eq('user_id', userId);
       setEnrollments(enrollmentData || []);
 
-      // --- 3. My Students (UPDATED: SAFE TWO-STEP FETCH) ---
-      // Step A: Get the IDs of hobbies YOU created first
+      // 3. My Students
+      setStudentFetchError(null);
       const { data: myHobbies } = await supabase
         .from('hobbies')
         .select('id')
@@ -60,30 +68,59 @@ const TutorDashboard = () => {
 
       const myHobbyIds = myHobbies?.map(h => h.id) || [];
 
-      // Step B: If you have hobbies, fetch students enrolled ONLY in those hobbies
       if (myHobbyIds.length > 0) {
-        const { data: studentData, error } = await supabase
-          .from('enrollments')
+        const { data: hobbiesWithEnrollments, error } = await supabase
+          .from('hobbies')
           .select(`
             id,
-            created_at,
-            status,
-            hobbies (id, title, created_by),
-            profiles:user_id (full_name, avatar_url, email)
+            title,
+            enrollments (
+              id,
+              created_at,
+              status,
+              user_id
+            )
           `)
-          .in('hobby_id', myHobbyIds) // Filter: Must be in MY hobbies list
-          .neq('status', 'graduated'); // Don't show graduated students
+          .in('id', myHobbyIds);
 
         if (error) {
-            console.error("Error fetching students:", error);
+          console.error('Error fetching students via hobbies:', error);
+          setStudentFetchError(error.message || 'Failed to fetch students');
+          setMyStudents([]);
         } else {
-            setMyStudents(studentData || []);
+          // Flatten enrollments across all hobbies and attach hobby info
+          const flattened = (hobbiesWithEnrollments || []).flatMap(h => (
+            (h.enrollments || [])
+              // --- FIX 1: Robust Filtering ---
+              // Filter out anyone who is already graduated so they don't appear in the list
+              .filter(en => !en.status || String(en.status).trim().toLowerCase() !== 'graduated')
+              .map(en => ({ ...en, hobbies: { id: h.id, title: h.title } }))
+          ));
+
+          // Fetch profile info for all student user_ids
+          const userIds = [...new Set(flattened.map(f => f.user_id).filter(Boolean))];
+          if (userIds.length > 0) {
+            const { data: profiles, error: profErr } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url, email')
+              .in('id', userIds);
+
+            if (profErr) {
+              console.error('Error fetching profiles for students:', profErr);
+              setStudentFetchError(profErr.message || 'Failed to fetch student profiles');
+              setMyStudents(flattened);
+            } else {
+              const profileMap = (profiles || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
+              const merged = flattened.map(en => ({ ...en, profiles: profileMap[en.user_id] || null }));
+              setMyStudents(merged);
+            }
+          } else {
+            setMyStudents(flattened);
+          }
         }
       } else {
-        // You haven't created any hobbies, so you have no students
         setMyStudents([]);
       }
-      // ----------------------------------------------------
 
       // 4. Listings
       const { data: hobbies } = await supabase.from('hobbies').select('*').eq('created_by', userId);
@@ -92,7 +129,6 @@ const TutorDashboard = () => {
       }
 
       // 5. Reviews
-      // Note: We keep !inner here if it works for reviews, otherwise apply similar logic if this fails too.
       const { data: reviewsOnMe } = await supabase.from('reviews').select('*, hobbies!inner(title, created_by)').eq('hobbies.created_by', userId);
       setReceivedReviews(reviewsOnMe || []);
 
@@ -113,6 +149,29 @@ const TutorDashboard = () => {
   };
 
   // --- ACTIONS ---
+  
+  const handleSaveProfile = async () => {
+    if (!session?.user) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: profile.full_name,
+          bio: profile.bio,
+        })
+        .eq('id', session.user.id);
+
+      if (error) throw error;
+
+      alert("Profile updated successfully!");
+      getInitialData(); 
+      
+    } catch (error) {
+      alert("Error updating profile: " + error.message);
+    }
+  };
+
   const handleFakePayment = async (plan) => {
     setProcessingPayment(true);
     const expiryDate = new Date();
@@ -147,22 +206,45 @@ const TutorDashboard = () => {
     }
   };
 
-  const handleGraduateStudent = async (enrollmentId, studentName) => {
-    if (!window.confirm(`Are you sure you want to graduate ${studentName}?`)) return;
+  const handleGraduateStudent = (enrollmentId, studentName) => {
+    setGradTarget({ enrollmentId, studentName });
+    setShowGradModal(true);
+  };
 
+  // --- FINAL FIX: Database Update & UI Removal ---
+  const confirmGraduateStudent = async () => {
+    const { enrollmentId, studentName } = gradTarget;
+    if (!enrollmentId) return;
+    
+    setGradProcessing(true);
+    
     try {
-      // Updates the status in your 'enrollments' table
+      // 1. Update Database Status
       const { error } = await supabase
         .from('enrollments')
-        .update({ status: 'graduated' }) 
+        .update({ status: 'graduated' }) // Updates the 'status' column in your screenshot
         .eq('id', enrollmentId);
 
       if (error) throw error;
-      
-      alert(`${studentName} has been graduated!`);
-      getInitialData(); 
+
+      // 2. Update UI Immediately (Remove from list)
+      setMyStudents((currentStudents) => 
+        currentStudents.filter((student) => student.id !== enrollmentId)
+      );
+
+      // 3. Close Modal & Show Success
+      setShowGradModal(false);
+      setGradSuccessName(studentName);
+      setShowGradSuccessModal(true);
+
+      // Reset Target
+      setGradTarget({ enrollmentId: null, studentName: '' });
+
     } catch (error) {
-      alert("Error graduating student: " + error.message);
+      console.error("Graduation Error:", error);
+      alert('Error graduating student: ' + error.message);
+    } finally {
+      setGradProcessing(false);
     }
   };
 
@@ -175,18 +257,53 @@ const TutorDashboard = () => {
             <h2 className="text-2xl font-bold text-white mb-6">Profile Settings</h2>
             <div className="space-y-6">
               <div className="flex items-center gap-6">
-                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current.click()}>
-                  {profile.avatar_url ? <img src={profile.avatar_url} className="w-24 h-24 rounded-full object-cover border-2 border-orange-500" /> : <div className="w-24 h-24 rounded-full bg-neutral-900 border border-white/10 flex items-center justify-center text-orange-500"><User size={32} /></div>}
-                  <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Camera size={18} className="text-white" /></div>
+                
+                {/* Avatar Section */}
+                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  {profile.avatar_url ? (
+                    <img src={profile.avatar_url} className="w-24 h-24 rounded-full object-cover border-2 border-orange-500" alt="Avatar" />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-neutral-900 border border-white/10 flex items-center justify-center text-orange-500"><User size={32} /></div>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera size={18} className="text-white" />
+                  </div>
                 </div>
+
+                {/* Hidden File Input */}
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={(e) => alert("Image upload logic pending implementation.")}
+                />
+
                 <div>
-                   <h3 className="text-white font-bold text-lg">{profile.full_name || 'Vince Rufino'}</h3>
+                   <h3 className="text-white font-bold text-lg">{profile.full_name || 'User'}</h3>
                    <p className="text-gray-500 text-sm">Tutor ID: {session?.user.id.slice(0,8)}</p>
                 </div>
               </div>
-              <input value={profile.full_name} onChange={(e) => setProfile({...profile, full_name: e.target.value})} className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-white focus:border-orange-500 outline-none" placeholder="Full Name" />
-              <textarea value={profile.bio} onChange={(e) => setProfile({...profile, bio: e.target.value})} rows="4" className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-white focus:border-orange-500 outline-none" placeholder="Tell students about your skills..." />
-              <button className="bg-orange-600 px-8 py-3 rounded-xl font-bold hover:bg-orange-700 transition-all">Save Changes</button>
+
+              <input 
+                value={profile.full_name || ''} 
+                onChange={(e) => setProfile({...profile, full_name: e.target.value})} 
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-white focus:border-orange-500 outline-none" 
+                placeholder="Full Name" 
+              />
+              <textarea 
+                value={profile.bio || ''} 
+                onChange={(e) => setProfile({...profile, bio: e.target.value})} 
+                rows="4" 
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-white focus:border-orange-500 outline-none" 
+                placeholder="Tell students about your skills..." 
+              />
+              <button 
+                onClick={handleSaveProfile}
+                className="bg-orange-600 px-8 py-3 rounded-xl font-bold hover:bg-orange-700 transition-all"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         );
@@ -197,7 +314,7 @@ const TutorDashboard = () => {
             <h2 className="text-2xl font-bold text-white mb-6">Learning Dashboard</h2>
             {enrollments.length === 0 ? <p className="text-gray-500 italic">You aren't enrolled in any classes yet.</p> : enrollments.map(e => (
               <div key={e.id} className="bg-neutral-900 p-5 rounded-2xl border border-white/5 flex gap-4 items-center">
-                <img src={e.hobbies?.image_url} className="w-16 h-16 rounded-xl object-cover" />
+                <img src={e.hobbies?.image_url} className="w-16 h-16 rounded-xl object-cover" alt="Hobby" />
                 <div className="flex-1">
                   <h3 className="text-white font-bold">{e.hobbies?.title}</h3>
                   <span className="text-[10px] bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded border border-blue-500/20 uppercase font-bold tracking-tighter">Student</span>
@@ -208,7 +325,6 @@ const TutorDashboard = () => {
           </div>
         );
 
-      // --- TAB: Enrolled Students (Connected to your Screenshot) ---
       case 'enrolled_students':
         return (
           <div className="animate-in fade-in">
@@ -229,7 +345,7 @@ const TutorDashboard = () => {
                        <td className="p-4">
                          <div className="flex items-center gap-3">
                             {item.profiles?.avatar_url ? (
-                              <img src={item.profiles.avatar_url} className="w-8 h-8 rounded-full object-cover" />
+                              <img src={item.profiles.avatar_url} className="w-8 h-8 rounded-full object-cover" alt="Student" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-xs font-bold">{item.profiles?.full_name?.charAt(0) || 'S'}</div>
                             )}
@@ -251,7 +367,7 @@ const TutorDashboard = () => {
                            <div className="absolute right-0 top-full mt-1 w-48 bg-neutral-800 border border-white/10 rounded-xl shadow-xl z-50 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all transform origin-top-right scale-95 group-hover/menu:scale-100">
                               <div className="p-1">
                                 <button 
-                                  onClick={() => handleGraduateStudent(item.id, item.profiles?.full_name)}
+                                      onClick={() => handleGraduateStudent(item.id, item.profiles?.full_name)}
                                   className="w-full text-left px-3 py-2 text-xs font-bold text-green-400 hover:bg-green-500/10 rounded-lg flex items-center gap-2"
                                 >
                                   <GraduationCap size={14} /> Graduate Student
@@ -269,10 +385,17 @@ const TutorDashboard = () => {
                        </td>
                      </tr>
                    ))}
-                   {myStudents.length === 0 && (
+                   {studentFetchError && (
+                     <tr>
+                       <td colSpan="4" className="p-6 text-center text-red-400 font-bold">
+                         Failed to load students: {studentFetchError}
+                       </td>
+                     </tr>
+                   )}
+                   {!studentFetchError && myStudents.length === 0 && (
                      <tr>
                        <td colSpan="4" className="p-10 text-center text-gray-500 italic">
-                         No students have enrolled in your classes yet.
+                         No students have enrolled in your classes yet (or all have graduated).
                        </td>
                      </tr>
                    )}
@@ -292,7 +415,7 @@ const TutorDashboard = () => {
             <div className="grid gap-4">
               {approvedListings.map(h => (
                 <div key={h.id} className={`bg-neutral-900 border p-5 rounded-2xl flex items-center gap-6 transition-all ${h.featured ? 'border-yellow-500/40 bg-yellow-500/[0.02]' : 'border-white/5'}`}>
-                  <img src={h.image_url} className="w-20 h-20 rounded-xl object-cover" />
+                  <img src={h.image_url} className="w-20 h-20 rounded-xl object-cover" alt="Listing" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-white font-bold text-lg">{h.title}</h3>
@@ -397,9 +520,7 @@ const TutorDashboard = () => {
           <div>
             <h3 className="px-4 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-2">Teaching View</h3>
             <div className="space-y-1">
-              {/* --- ENROLLED STUDENTS BUTTON --- */}
               <button onClick={() => setActiveTab('enrolled_students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'enrolled_students' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Users size={18}/> Enrolled Students</button>
-              
               <button onClick={() => setActiveTab('listings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'listings' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><List size={18}/> My Listings</button>
               <button onClick={() => setActiveTab('reviews_received')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'reviews_received' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><MessageCircle size={18}/> My Reviews</button>
               <button onClick={() => setActiveTab('transactions')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><History size={18}/> Transactions</button>
@@ -445,6 +566,9 @@ const TutorDashboard = () => {
           </div>
         </div>
       )}
+      {/* Graduation Confirmation Modal */}
+      <GraduateModal isOpen={showGradModal} onClose={() => setShowGradModal(false)} onConfirm={confirmGraduateStudent} studentName={gradTarget.studentName} loading={gradProcessing} />
+      <GraduateSuccessModal isOpen={showGradSuccessModal} onClose={() => setShowGradSuccessModal(false)} studentName={gradSuccessName} />
     </div>
   );
 };

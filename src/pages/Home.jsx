@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import HobbyModal from '../components/HobbyModal';
+import ProfileModal from '../components/ProfileModal';
 import { 
   FaGamepad, FaLaptopCode, FaMusic, FaUtensils, FaLanguage, 
   FaPaintBrush, FaBriefcase, FaDumbbell, FaPencilAlt, FaCameraRetro, 
@@ -7,7 +9,7 @@ import {
 } from 'react-icons/fa';
 
 // --- CAROUSEL COMPONENT ---
-const Carousel = ({ items, loading }) => {
+const Carousel = ({ items, loading, onOpenHobby, onOpenProfile }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -64,11 +66,11 @@ const Carousel = ({ items, loading }) => {
                 </div>
               </div>
               <div className="flex justify-between items-center pt-6 border-t border-white/10">
-                <div className="flex items-center gap-3">
+                <div onClick={() => onOpenProfile?.(item.created_by)} className="flex items-center gap-3 cursor-pointer">
                   <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-white"><FaUser size={12} /></div>
-                  <p className="text-gray-300 font-bold text-sm">{item.profiles?.full_name || 'Anonymous Tutor'}</p>
+                  <p className="text-gray-300 font-bold text-sm hover:text-orange-500 transition-colors">{item.profiles?.full_name || 'Anonymous Tutor'}</p>
                 </div>
-                <button className="text-sm font-bold text-white bg-white/10 hover:bg-white/20 px-6 py-2 rounded-full transition-all">View Details</button>
+                <button onClick={() => onOpenHobby?.(item)} className="text-sm font-bold text-white bg-white/10 hover:bg-white/20 px-6 py-2 rounded-full transition-all">View Details</button>
               </div>
             </div>
           </div>
@@ -84,6 +86,12 @@ const Carousel = ({ items, loading }) => {
 const Home = () => {
   const [featuredItems, setFeaturedItems] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Hobby / Profile modal state
+  const [isHobbyOpen, setIsHobbyOpen] = useState(false);
+  const [selectedHobby, setSelectedHobby] = useState(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
 
   const categories = [
     { name: 'Gaming', icon: FaGamepad }, { name: 'Coding', icon: FaLaptopCode },
@@ -116,7 +124,7 @@ const Home = () => {
             <p className="text-xl text-gray-400 max-w-lg leading-relaxed">Connect with expert mentors to master gaming, hobbies, and professional skills. Your journey starts now.</p>
             <a href="/hobbies" className="inline-block bg-gradient-to-r from-orange-500 to-orange-700 text-white px-10 py-5 rounded-full font-black shadow-lg hover:shadow-orange-600/50 transform hover:-translate-y-1 transition-all text-lg">Find a Tutor</a>
           </div>
-          <div className="relative h-full"><Carousel items={featuredItems} loading={loading} /></div>
+          <div className="relative h-full"><Carousel items={featuredItems} loading={loading} onOpenHobby={(h) => { setSelectedHobby(h); setIsHobbyOpen(true); }} onOpenProfile={(id) => { setIsHobbyOpen(false); setSelectedProfileId(id); setIsProfileOpen(true); }} /></div>
         </div>
       </div>
 
@@ -136,6 +144,10 @@ const Home = () => {
           ))}
         </div>
       </div>
+
+      {/* Modals */}
+      <HobbyModal isOpen={isHobbyOpen} onClose={() => setIsHobbyOpen(false)} hobby={selectedHobby} onOpenProfile={(id) => { setIsHobbyOpen(false); setSelectedProfileId(id); setIsProfileOpen(true); }} />
+      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} profileId={selectedProfileId} />
 
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-600/5 rounded-full blur-[100px] pointer-events-none z-0" />
     </div>

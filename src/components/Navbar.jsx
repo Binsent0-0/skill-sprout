@@ -1,29 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { Link, useNavigate } from 'react-router-dom'; 
 import { supabase } from '../supabaseClient'; 
 
 const Navbar = ({ session, onOpenModal, onLogout }) => {
   const [userRole, setUserRole] = useState(null);
-  const navigate = useNavigate(); // Initialize navigate
+  const [dbName, setDbName] = useState(null); // 1. Add state for the database name
+  const navigate = useNavigate(); 
 
   useEffect(() => {
-    const fetchUserRole = async () => {
+    const fetchUserProfile = async () => {
       if (session?.user) {
         const { data } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, full_name') // 2. Select 'full_name' alongside 'role'
           .eq('id', session.user.id)
           .single();
-        if (data) setUserRole(data.role);
+
+        if (data) {
+            setUserRole(data.role);
+            setDbName(data.full_name); // 3. Set the name from the database
+        }
       } else {
         setUserRole(null);
+        setDbName(null);
       }
     };
-    fetchUserRole();
+    fetchUserProfile();
   }, [session]);
 
-  const getUserName = () => {
+  // 4. Update logic to prioritize the database name
+  const getDisplayName = () => {
+    if (dbName) return dbName; // Priority: Live database name
     if (!session || !session.user) return 'User';
+    // Fallback: Session metadata or email
     return session.user.user_metadata?.full_name || session.user.email.split('@')[0];
   };
 
@@ -33,10 +42,9 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
     return "/dashboard";
   };
 
-  // Wrapped Logout handler
   const handleLogoutClick = async () => {
-    await onLogout(); // Existing logout logic
-    navigate('/');    // Teleport to home
+    await onLogout(); 
+    navigate('/');    
   };
 
   return (
@@ -65,7 +73,8 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
             ) : (
               <>
                 <Link to={getDashboardPath()} className="text-gray-300 hover:text-orange-500 font-medium transition duration-200 hidden lg:block">
-                  Hello, <span className="text-white font-semibold">{getUserName()}!</span>
+                  {/* 5. Use the new helper function */}
+                  Hello, <span className="text-white font-semibold">{getDisplayName()}!</span>
                 </Link>
                 <button onClick={handleLogoutClick} className="text-gray-300 hover:text-red-500 font-medium transition duration-200">Sign Out</button>
                 
