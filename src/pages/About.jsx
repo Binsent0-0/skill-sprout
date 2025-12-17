@@ -116,16 +116,9 @@ const About = () => {
                 </div>
               </div>
             </div>
-
-          </div>
-          
-          {/* Footer Copyright */}
-          <div className="mt-20 pt-8 border-t border-white/5 text-center text-gray-600 text-sm">
-            <p>&copy; {new Date().getFullYear()} SkillSprout. Made with ❤️ in the Philippines.</p>
           </div>
         </div>
       </div>
-
     </div>
   );
 };

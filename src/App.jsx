@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import AuthModal from './components/AuthModal';
 import ProtectedRoute from './components/ProtectedRoute';
 import ChatWidget from './components/ChatWidget';
@@ -27,6 +28,13 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Listen for a global event to open the AuthModal (used by localized prompts)
+  useEffect(() => {
+    const openListener = () => setIsModalOpen(true);
+    window.addEventListener('open-auth-modal', openListener);
+    return () => window.removeEventListener('open-auth-modal', openListener);
   }, []);
 
   return (
@@ -68,6 +76,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
           
         </Routes>
+        <Footer />
       </div>
     </div>
   );

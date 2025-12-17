@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Star, User, Loader2, CheckCircle, CreditCard } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import EnrollAuthPrompt from './EnrollAuthPrompt';
 
 const HobbyModal = ({ isOpen, onClose, hobby, onOpenProfile }) => {
   const [step, setStep] = useState('details'); // 'details' | 'payment' | 'success'
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -16,7 +18,7 @@ const HobbyModal = ({ isOpen, onClose, hobby, onOpenProfile }) => {
 
   const handleEnrollment = async () => {
     if (!user) {
-      alert("Please login to enroll!");
+      setShowAuthPrompt(true);
       return;
     }
 
@@ -80,6 +82,8 @@ const HobbyModal = ({ isOpen, onClose, hobby, onOpenProfile }) => {
           <X size={24} />
         </button>
 
+        {/* Prompt shown when user tries to enroll but is not signed in */}
+        <EnrollAuthPrompt isOpen={showAuthPrompt} onClose={() => { setShowAuthPrompt(false); onClose(); }} />
         {/* STEP 1: HOBBY DETAILS */}
         {step === 'details' && (
           <div className="flex flex-col md:flex-row h-full max-h-[90vh] overflow-y-auto">

@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 
 const Navbar = ({ session, onOpenModal, onLogout }) => {
   const [userRole, setUserRole] = useState(null);
-  const [dbName, setDbName] = useState(null); // 1. Add state for the database name
+  const [dbName, setDbName] = useState(null); 
   const navigate = useNavigate(); 
 
   useEffect(() => {
@@ -12,13 +12,13 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
       if (session?.user) {
         const { data } = await supabase
           .from('profiles')
-          .select('role, full_name') // 2. Select 'full_name' alongside 'role'
+          .select('role, full_name') 
           .eq('id', session.user.id)
           .single();
 
         if (data) {
-            setUserRole(data.role);
-            setDbName(data.full_name); // 3. Set the name from the database
+           setUserRole(data.role);
+           setDbName(data.full_name); 
         }
       } else {
         setUserRole(null);
@@ -28,11 +28,9 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
     fetchUserProfile();
   }, [session]);
 
-  // 4. Update logic to prioritize the database name
   const getDisplayName = () => {
-    if (dbName) return dbName; // Priority: Live database name
+    if (dbName) return dbName; 
     if (!session || !session.user) return 'User';
-    // Fallback: Session metadata or email
     return session.user.user_metadata?.full_name || session.user.email.split('@')[0];
   };
 
@@ -59,30 +57,40 @@ const Navbar = ({ session, onOpenModal, onLogout }) => {
 
           <div className="absolute left-1/2 transform -translate-x-1/2 hidden lg:flex space-x-8 items-center">
             <Link to="/" className="text-gray-300 hover:text-orange-500 font-medium transition duration-200">Home</Link>
-            <Link to="/about" className="text-gray-300 hover:text-orange-500 font-medium transition duration-200">About Us</Link>
             <Link to="/hobbies" className="text-gray-300 hover:text-orange-500 font-medium transition duration-200">Hobbies</Link>
             <Link to="/tutors" className="text-gray-300 hover:text-orange-500 font-medium transition duration-200">Tutors</Link>
           </div>
 
           <div className="flex items-center space-x-6">
             {!session ? (
-              <>
-                <button onClick={onOpenModal} className="text-gray-300 hover:text-white font-medium transition duration-200">Login</button>
-                <button onClick={onOpenModal} className="bg-gradient-to-r from-orange-500 to-orange-700 text-white px-6 py-2.5 rounded-full font-semibold transition-all">Become a Tutor</button>
-              </>
+              /* --- UPDATED: Login button now uses the Dark/Orange Border style --- */
+              <button 
+                onClick={onOpenModal} 
+                className="bg-neutral-800 border border-orange-500/50 text-orange-500 px-6 py-2.5 rounded-full font-semibold transition-all hover:bg-neutral-700 hover:border-orange-500 hover:text-orange-400"
+              >
+                Login
+              </button>
             ) : (
               <>
                 <Link to={getDashboardPath()} className="text-gray-300 hover:text-orange-500 font-medium transition duration-200 hidden lg:block">
-                  {/* 5. Use the new helper function */}
                   Hello, <span className="text-white font-semibold">{getDisplayName()}!</span>
                 </Link>
                 <button onClick={handleLogoutClick} className="text-gray-300 hover:text-red-500 font-medium transition duration-200">Sign Out</button>
                 
-                {userRole === 'admin' ? (
+                {userRole === 'admin' && (
                   <Link to="/admin" className="bg-purple-600 text-white px-6 py-2.5 rounded-full font-semibold hover:bg-purple-500 transition-all">Admin Panel</Link>
-                ) : userRole === 'tutor' ? (
-                  <Link to="/create-listing" className="bg-neutral-800 border border-orange-500/50 text-orange-500 px-6 py-2.5 rounded-full font-semibold transition-all">+ Create Listing</Link>
-                ) : (
+                )}
+                
+                {userRole === 'tutor' && (
+                  <Link 
+                    to="/create-listing" 
+                    className="bg-neutral-800 border border-orange-500/50 text-orange-500 px-6 py-2.5 rounded-full font-semibold transition-all hover:bg-neutral-700 hover:border-orange-500"
+                  >
+                    + Create Listing
+                  </Link>
+                )}
+
+                {userRole === 'student' && (
                   <Link to="/apply" className="bg-gradient-to-r from-orange-500 to-orange-700 text-white px-6 py-2.5 rounded-full font-semibold transition-all">Become a Tutor</Link>
                 )}
               </>
