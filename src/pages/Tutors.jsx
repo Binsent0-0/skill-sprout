@@ -63,59 +63,93 @@ const Tutors = ({ onContactTutor }) => {
     if (onContactTutor) onContactTutor(tutor);
   };
 
-  // Reusable Card Component to keep code clean
-  const TutorCard = ({ tutor, isFeatured }) => (
-    <div className={`group relative bg-neutral-900 border rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 transition-all duration-300 overflow-hidden ${isFeatured ? 'border-orange-500/30 hover:bg-neutral-800/80 shadow-orange-900/20 shadow-lg' : 'border-white/5 hover:bg-neutral-800/50 hover:border-white/10'}`}>
-      
-      {/* Glow effect only for featured tutors */}
-      {isFeatured && <div className="absolute -top-10 -right-10 w-32 h-32 bg-orange-600/10 blur-[50px] rounded-full pointer-events-none" />}
+  // Reusable Card Component
+  const TutorCard = ({ tutor, isFeatured }) => {
+    // Ensure rating is a number, default to 0 if null
+    const ratingValue = Number(tutor.rating) || 0;
+    // Calculate width percentage for the filled stars
+    const ratingPercentage = (ratingValue / 5) * 100;
 
-      {/* Tutor Image */}
-      <div className="relative flex-shrink-0 cursor-pointer" onClick={() => openTutorProfile(tutor.id)}>
-        {tutor.avatar_url ? (
-          <img 
-            src={tutor.avatar_url} 
-            alt={tutor.full_name} 
-            className={`w-32 h-32 md:w-40 md:h-40 rounded-2xl object-cover border-2 transition-colors ${isFeatured ? 'border-orange-500/50 group-hover:border-orange-500' : 'border-white/10 group-hover:border-white/30'}`}
-          />
-        ) : (
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl bg-neutral-800 flex items-center justify-center text-gray-500 border-2 border-white/5">
-            <FaUser size={50} />
-          </div>
-        )}
+    return (
+      <div className={`group relative bg-neutral-900 border rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 transition-all duration-300 overflow-hidden ${isFeatured ? 'border-orange-500/30 hover:bg-neutral-800/80 shadow-orange-900/20 shadow-lg' : 'border-white/5 hover:bg-neutral-800/50 hover:border-white/10'}`}>
         
-        {/* Featured Badge */}
-        {isFeatured && (
-          <div className="absolute -bottom-3 -right-3 bg-orange-600 text-white p-2 rounded-xl shadow-lg border border-orange-400">
-            <FaStar size={14} />
+        {/* Glow effect only for featured tutors */}
+        {isFeatured && <div className="absolute -top-10 -right-10 w-32 h-32 bg-orange-600/10 blur-[50px] rounded-full pointer-events-none" />}
+
+        {/* Tutor Image */}
+        <div className="relative flex-shrink-0 cursor-pointer" onClick={() => openTutorProfile(tutor.id)}>
+          {tutor.avatar_url ? (
+            <img 
+              src={tutor.avatar_url} 
+              alt={tutor.full_name} 
+              className={`w-32 h-32 md:w-40 md:h-40 rounded-2xl object-cover border-2 transition-colors ${isFeatured ? 'border-orange-500/50 group-hover:border-orange-500' : 'border-white/10 group-hover:border-white/30'}`}
+            />
+          ) : (
+            <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl bg-neutral-800 flex items-center justify-center text-gray-500 border-2 border-white/5">
+              <FaUser size={50} />
+            </div>
+          )}
+          
+          {/* Featured Badge */}
+          {isFeatured && (
+            <div className="absolute -bottom-3 -right-3 bg-orange-600 text-white p-2 rounded-xl shadow-lg border border-orange-400">
+              <FaStar size={14} />
+            </div>
+          )}
+        </div>
+
+        {/* Tutor Info */}
+        <div className="flex-1 text-center md:text-left z-10 w-full">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 mb-2">
+            <h2 onClick={() => openTutorProfile(tutor.id)} className={`text-2xl font-bold cursor-pointer transition-colors ${isFeatured ? 'text-white group-hover:text-orange-400' : 'text-gray-200 group-hover:text-white'}`}>
+              {tutor.full_name || 'Anonymous Tutor'}
+            </h2>
+            {isFeatured && <span className="bg-orange-500/10 text-orange-500 text-[10px] uppercase font-bold tracking-widest px-2 py-1 rounded-md border border-orange-500/20 w-fit mx-auto md:mx-0">Featured</span>}
           </div>
-        )}
-      </div>
 
-      {/* Tutor Info */}
-      <div className="flex-1 text-center md:text-left z-10">
-        <div className="flex flex-col md:flex-row md:items-center gap-2 mb-3">
-          <h2 onClick={() => openTutorProfile(tutor.id)} className={`text-2xl font-bold cursor-pointer transition-colors ${isFeatured ? 'text-white group-hover:text-orange-400' : 'text-gray-200 group-hover:text-white'}`}>
-            {tutor.full_name || 'Anonymous Tutor'}
-          </h2>
-          {isFeatured && <span className="bg-orange-500/10 text-orange-500 text-[10px] uppercase font-bold tracking-widest px-2 py-1 rounded-md border border-orange-500/20 w-fit mx-auto md:mx-0">Featured</span>}
-        </div>
-        
-        <p className="text-gray-400 leading-relaxed mb-6 line-clamp-3 italic font-medium">
-          "{tutor.bio || 'Expert mentor ready to help you grow.'}"
-        </p>
+          {/* --- NEW: RATING SECTION --- */}
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-2 mb-4">
+            <div className="relative flex items-center" title={`Rating: ${ratingValue.toFixed(1)} / 5`}>
+              {/* Background Stars (Grey) */}
+              <div className="flex text-neutral-700">
+                {[...Array(5)].map((_, i) => (
+                  <FaStar key={`bg-${i}`} size={16} />
+                ))}
+              </div>
+              
+              {/* Foreground Stars (Orange) - Width clipped based on rating */}
+              <div 
+                className="absolute top-0 left-0 flex text-orange-500 overflow-hidden" 
+                style={{ width: `${ratingPercentage}%` }}
+              >
+                {[...Array(5)].map((_, i) => (
+                  <FaStar key={`fg-${i}`} size={16} />
+                ))}
+              </div>
+            </div>
+            
+            <span className="text-sm font-medium text-gray-400">
+              Rating: <span className="text-white">{ratingValue.toFixed(1)}</span>
+            </span>
+          </div>
+          {/* --------------------------- */}
+          
+          <p className="text-gray-400 leading-relaxed mb-6 line-clamp-3 italic font-medium">
+            "{tutor.bio || 'Expert mentor ready to help you grow.'}"
+          </p>
 
-        <div className="flex flex-wrap justify-center md:justify-start gap-3">
-          <button onClick={() => openTutorProfile(tutor.id)} className={`px-6 py-3 rounded-xl font-bold transition-all transform active:scale-95 ${isFeatured ? 'bg-white text-black hover:bg-orange-500 hover:text-white' : 'bg-neutral-800 text-gray-300 hover:bg-white hover:text-black'}`}>
-            View Profile
-          </button>
-          <button onClick={() => handleDirectMessage(tutor)} className="px-6 py-3 rounded-xl border border-white/10 text-white font-bold hover:bg-white/5 transition-all transform active:scale-95">
-            Message
-          </button>
+          <div className="flex flex-wrap justify-center md:justify-start gap-3">
+            <button onClick={() => openTutorProfile(tutor.id)} className={`px-6 py-3 rounded-xl font-bold transition-all transform active:scale-95 ${isFeatured ? 'bg-white text-black hover:bg-orange-500 hover:text-white' : 'bg-neutral-800 text-gray-300 hover:bg-white hover:text-black'}`}>
+              View Profile
+            </button>
+            <button onClick={() => handleDirectMessage(tutor)} className="px-6 py-3 rounded-xl border border-white/10 text-white font-bold hover:bg-white/5 transition-all transform active:scale-95">
+              Message
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-black pt-28 pb-12 px-6 lg:px-8 font-sans">

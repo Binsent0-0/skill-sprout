@@ -17,6 +17,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import TutorDashboard from './pages/TutorDashboard';
 import Apply from './pages/Apply';
 import CreateListing from './pages/CreateListing';
+import ViewClassroom from './pages/ViewClassroom';
 import NotFound from './components/NotFound'; // <--- 1. IMPORT THIS
 
 function App() {
@@ -66,7 +67,7 @@ function App() {
           <Route path="/hobbies" element={<Hobbies onContactTutor={setActiveChatUser} />} />
           <Route path="/tutors" element={<Tutors onContactTutor={setActiveChatUser} />} />
           <Route path="/apply" element={<Apply />} />
-          
+          <Route path="/classroom/:id" element={<ViewClassroom />} />
           <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/tutor-dashboard" element={<ProtectedRoute allowedRole="tutor"><TutorDashboard /></ProtectedRoute>} />
           <Route path="/create-listing" element={<ProtectedRoute allowedRole="tutor"><CreateListing /></ProtectedRoute>} />

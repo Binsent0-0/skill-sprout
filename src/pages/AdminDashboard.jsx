@@ -5,7 +5,7 @@ import {
   Lock, Users, FileText, LogOut, 
   MoreVertical, Edit, Trash2, CheckCircle, XCircle, 
   Star, Clock, Loader2, History, TrendingUp, TrendingDown, 
-  UserPlus, AlertTriangle 
+  UserPlus, AlertTriangle, Eye, PlayCircle, Video 
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -28,6 +28,9 @@ const AdminDashboard = () => {
   const [editingUser, setEditingUser] = useState(null); 
   const [deletingUser, setDeletingUser] = useState(null); 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // NEW: State for viewing lesson content
+  const [viewingPost, setViewingPost] = useState(null);
   
   // Edit Form State
   const [editName, setEditName] = useState('');
@@ -38,7 +41,6 @@ const AdminDashboard = () => {
   // Disable page/body scrolling while admin panel is active
   useEffect(() => {
     if (!isAuthenticated) return;
-    // We lock the body scroll because the dashboard handles its own scrolling
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'auto'; };
   }, [isAuthenticated]);
@@ -64,7 +66,8 @@ const AdminDashboard = () => {
     setUsers(userData || []);
 
     // 2. Fetch Hobbies (Posts)
-    const { data: postData, error: postError } = await supabase.rpc('get_admin_hobbies', { pin_code: pin });
+    // Note: Ensure your 'get_admin_hobbies' RPC or query selects the 'lessons' column
+    const { data: postData } = await supabase.rpc('get_admin_hobbies', { pin_code: pin });
     if (postData) {
         setPendingPosts(postData.filter(p => p.status === 'pending'));
         setPosts(postData.filter(p => p.status !== 'pending'));
@@ -130,7 +133,10 @@ const AdminDashboard = () => {
 
   const handlePostAction = async (postId, newStatus) => {
     const { error } = await supabase.rpc('admin_update_post_status', { target_post_id: postId, new_status: newStatus, pin_code: pin });
-    if (!error) fetchAllData();
+    if (!error) {
+        fetchAllData();
+        setViewingPost(null); // Close modal if open
+    }
   };
 
   const handleFeatureToggle = async (type, id) => {
@@ -301,13 +307,18 @@ const AdminDashboard = () => {
                 <h2 className="text-xl font-bold text-white mb-4">Approval Queue ({pendingPosts.length})</h2>
                 {pendingPosts.length === 0 ? <div className="p-12 text-center text-gray-500 bg-neutral-900 border border-white/5 rounded-2xl">All caught up!</div> : (
                     pendingPosts.map(post => (
-                        <div key={post.id} className="bg-neutral-900 border border-white/10 rounded-2xl p-6 flex items-start gap-6 shadow-lg">
-                            {post.image_url ? <img src={post.image_url} className="w-32 h-24 object-cover rounded-lg border border-white/5" /> : <div className="w-32 h-24 bg-neutral-800 rounded-lg flex items-center justify-center text-xs text-gray-600">No Image</div>}
-                            <div className="flex-1">
+                        <div key={post.id} className="bg-neutral-900 border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-start gap-6 shadow-lg">
+                            {post.image_url ? <img src={post.image_url} className="w-full md:w-32 h-32 md:h-24 object-cover rounded-lg border border-white/5" /> : <div className="w-full md:w-32 h-24 bg-neutral-800 rounded-lg flex items-center justify-center text-xs text-gray-600">No Image</div>}
+                            <div className="flex-1 w-full">
                                 <h3 className="text-lg font-bold text-white">{post.title}</h3>
                                 <p className="text-sm text-orange-400 mb-2">By {post.profiles?.full_name || 'Unknown'}</p>
                                 <p className="text-gray-400 text-sm mb-4 line-clamp-2">{post.description}</p>
-                                <div className="flex gap-3">
+                                
+                                <div className="flex flex-wrap gap-3">
+                                    <button onClick={() => setViewingPost(post)} className="px-5 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 text-sm font-bold rounded-lg flex items-center gap-2 transition">
+                                        <Eye size={16} /> View Content
+                                    </button>
+                                    <div className="flex-1"></div>
                                     <button onClick={() => handlePostAction(post.id, 'approved')} className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition shadow-lg shadow-green-900/20"><CheckCircle size={16} /> Accept</button>
                                     <button onClick={() => handlePostAction(post.id, 'rejected')} className="px-5 py-2 bg-white/5 hover:bg-red-500/20 text-gray-300 text-sm font-bold rounded-lg border border-white/10 transition"><XCircle size={16} /> Reject</button>
                                 </div>
@@ -338,8 +349,6 @@ const AdminDashboard = () => {
 
   // --- MAIN LAYOUT ---
   return (
-    // FIX 1: 'fixed inset-0 z-50' forces this to cover the whole screen,
-    // ignoring the parent's padding or navbar offset.
     <div className="fixed inset-0 z-50 flex bg-black font-sans">
       
       {/* Sidebar */}
@@ -348,8 +357,6 @@ const AdminDashboard = () => {
             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-red-500">Admin Panel</h1>
         </div>
         
-        {/* FIX 2: overflow-y-auto ensures that if this list is long, IT scrolls,
-            while the logout button stays fixed at the bottom. */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
           <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><Users size={20} /> Users</button>
           <button onClick={() => setActiveTab('applications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'applications' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}>
@@ -360,14 +367,8 @@ const AdminDashboard = () => {
           <button onClick={() => setActiveTab('transactions')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/40' : 'text-gray-400 hover:bg-white/5'}`}><History size={20} /> Transactions</button>
         </nav>
         
-        {/* Logout Button (Sticky Bottom) */}
         <div className="p-4 border-t border-white/5 shrink-0 bg-black">
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-bold"
-          >
-            <LogOut size={20} /> Logout
-          </button>
+          <button onClick={() => setShowLogoutConfirm(true)} className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors font-bold"><LogOut size={20} /> Logout</button>
         </div>
       </aside>
 
@@ -382,7 +383,53 @@ const AdminDashboard = () => {
         </div>
       </main>
 
-      {/* Modals (Edit, Delete, Logout) */}
+      {/* --- MODALS --- */}
+
+      {/* NEW: View Course Content Modal */}
+      {viewingPost && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+                <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                    <div>
+                        <h2 className="text-xl font-bold text-white">Course Content</h2>
+                        <p className="text-gray-400 text-sm">Reviewing: <span className="text-white font-medium">{viewingPost.title}</span></p>
+                    </div>
+                    <button onClick={() => setViewingPost(null)} className="p-2 hover:bg-white/10 rounded-full transition"><XCircle size={20} className="text-gray-400" /></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                    {(!viewingPost.lessons || viewingPost.lessons.length === 0) ? (
+                        <div className="text-center py-10 text-gray-500 italic">No video lessons uploaded for this course.</div>
+                    ) : (
+                        viewingPost.lessons.map((lesson, idx) => (
+                            <div key={idx} className="flex items-center gap-4 bg-black/40 border border-white/5 p-4 rounded-xl hover:bg-white/5 transition">
+                                <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500 shrink-0">
+                                    <Video size={20} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="text-white font-medium truncate">{lesson.title}</h4>
+                                    <p className="text-xs text-gray-500">Duration: {lesson.duration || 'N/A'}</p>
+                                </div>
+                                {lesson.url ? (
+                                    <a href={lesson.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm text-white transition">
+                                        <PlayCircle size={16} className="text-orange-500" /> Watch
+                                    </a>
+                                ) : (
+                                    <span className="text-xs text-red-500 font-medium px-3">No File</span>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-white/5 bg-neutral-950/50 rounded-b-2xl flex justify-end gap-3">
+                    <button onClick={() => setViewingPost(null)} className="px-6 py-3 border border-white/10 text-white rounded-lg hover:bg-white/5 transition">Close</button>
+                    <button onClick={() => handlePostAction(viewingPost.id, 'approved')} className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-lg shadow-green-900/20">Approve Course</button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {editingUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-neutral-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
@@ -415,19 +462,7 @@ const AdminDashboard = () => {
             <p className="text-gray-400 text-sm mb-6">Are you sure you want to sign out of the admin panel?</p>
             <div className="flex gap-3">
               <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 border border-white/10 text-white rounded-lg">Cancel</button>
-              <button
-                onClick={async () => {
-                  try { await supabase.auth.signOut(); } catch (err) { console.error('Sign out error:', err); }
-                  setShowLogoutConfirm(false);
-                  setIsAuthenticated(false);
-                  // Ensure we unlock the body scroll before leaving
-                  document.body.style.overflow = 'auto';
-                  navigate('/');
-                }}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg"
-              >
-                Sign Out
-              </button>
+              <button onClick={async () => { try { await supabase.auth.signOut(); } catch (err) { console.error('Sign out error:', err); } setShowLogoutConfirm(false); setIsAuthenticated(false); document.body.style.overflow = 'auto'; navigate('/'); }} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg">Sign Out</button>
             </div>
           </div>
         </div>
