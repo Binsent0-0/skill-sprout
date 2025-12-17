@@ -15,6 +15,7 @@ const StudentDashboard = () => {
   const [enrollments, setEnrollments] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [reviewSubTab, setReviewSubTab] = useState('toReview');
 
   // Form States
   const [password, setPassword] = useState('');
@@ -198,18 +199,42 @@ const StudentDashboard = () => {
         );
 
       case 'reviews':
+        const reviewedHobbyIds = new Set(reviews.map(r => r.hobby_id));
+        const toReviewEnrollments = enrollments.filter(e => !reviewedHobbyIds.has(e.hobby_id));
+
         return (
           <div className="space-y-4 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-white mb-6">My Reviews</h2>
-            {reviews.length === 0 ? <p className="text-gray-500 italic">You haven't left any reviews yet.</p> : reviews.map(r => (
-              <div key={r.id} className="bg-neutral-900 border border-white/5 p-5 rounded-2xl">
-                <div className="flex justify-between mb-2">
-                  <h4 className="text-white font-bold">{r.hobbies?.title}</h4>
-                  <div className="flex text-yellow-500">{[...Array(5)].map((_, i) => <Star key={i} size={14} fill={i < r.rating ? "currentColor" : "none"} />)}</div>
+            <div className="flex gap-4 mb-6">
+              <button onClick={() => setReviewSubTab('toReview')} className={`px-6 py-2 rounded-xl font-bold transition-all ${reviewSubTab === 'toReview' ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>Review</button>
+              <button onClick={() => setReviewSubTab('reviewed')} className={`px-6 py-2 rounded-xl font-bold transition-all ${reviewSubTab === 'reviewed' ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>Reviewed</button>
+            </div>
+            {reviewSubTab === 'toReview' ? (
+              toReviewEnrollments.length === 0 ? (
+                <p className="text-gray-500 italic">No lessons to review.</p>
+              ) : (
+                toReviewEnrollments.map(e => (
+                  <div key={e.id} className="bg-neutral-900 border border-white/5 p-5 rounded-2xl flex items-center gap-4 group hover:border-orange-500/30 transition-all">
+                    <img src={e.hobbies?.image_url} className="w-20 h-20 rounded-xl object-cover" alt="" />
+                    <div className="flex-1">
+                      <h3 className="text-white font-bold text-lg group-hover:text-orange-500 transition-colors">{e.hobbies?.title}</h3>
+                      <p className="text-gray-500 text-sm">Instructor: {e.hobbies?.profiles?.full_name}</p>
+                      <button className="mt-3 text-xs font-bold text-orange-500 flex items-center gap-1 uppercase tracking-widest">Review Lesson <ArrowRight size={12} /></button>
+                    </div>
+                  </div>
+                ))
+              )
+            ) : (
+              reviews.length === 0 ? <p className="text-gray-500 italic">You haven't left any reviews yet.</p> : reviews.map(r => (
+                <div key={r.id} className="bg-neutral-900 border border-white/5 p-5 rounded-2xl">
+                  <div className="flex justify-between mb-2">
+                    <h4 className="text-white font-bold">{r.hobbies?.title}</h4>
+                    <div className="flex text-yellow-500">{[...Array(5)].map((_, i) => <Star key={i} size={14} fill={i < r.rating ? "currentColor" : "none"} />)}</div>
+                  </div>
+                  <p className="text-gray-400 text-sm">"{r.comment}"</p>
                 </div>
-                <p className="text-gray-400 text-sm">"{r.comment}"</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         );
 

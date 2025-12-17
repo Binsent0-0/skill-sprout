@@ -178,14 +178,18 @@ const CreateListing = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">Category Tags</label>
-                <input 
+                <label className="block text-sm font-medium text-gray-300">Category</label>
+                <select
                   required
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
-                  placeholder="Music, Theory, Piano" 
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-white focus:border-orange-500 outline-none transition-all"
-                />
+                >
+                  <option value="" disabled>Select a category</option>
+                  {['Gaming', 'Coding', 'Music', 'Cooking', 'Languages', 'Design', 'Business', 'Fitness'].map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Tutor-Based Price Input */}
